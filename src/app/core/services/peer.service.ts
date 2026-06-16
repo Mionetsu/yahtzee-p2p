@@ -5,18 +5,19 @@ import { GameState } from '../models';
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 export interface P2PMessage {
-  type: 'game-state' | 'player-joined' | 'player-left' | 'chat';
+  type: 'game-state' | 'player-joined' | 'player-left' | 'chat' | 'start-game';
   payload: unknown;
 }
 
 @Injectable({ providedIn: 'root' })
 export class PeerService {
 
-  // -- Reactive state signals -------------------------------------------
   readonly status      = signal<ConnectionStatus>('disconnected');
   readonly roomCode    = signal<string>('');
   readonly peers       = signal<string[]>([]);
   readonly lastMessage = signal<P2PMessage | null>(null);
+  readonly myPeerId    = signal<string>('');
+  readonly isHost      = signal<boolean>(false);
 
   private peer:        Peer | null = null;
   private connections: Map<string, DataConnection> = new Map();
@@ -47,16 +48,17 @@ export class PeerService {
     localStorage.removeItem(this.ID_KEY);
   }
 
-  // -- Create a room (host) ---------------------------------------------
   createRoom(): Promise<string> {
     return new Promise((resolve, reject) => {
       const code = this.generateRoomCode();
       this.status.set('connecting');
+      this.isHost.set(true);
 
       this.peer = new Peer(code);
 
       this.peer.on('open', id => {
         this.roomCode.set(id);
+        this.myPeerId.set(id);
         this.status.set('connected');
         resolve(id);
       });
@@ -72,19 +74,21 @@ export class PeerService {
     });
   }
 
-  // -- Join a room (guest) ----------------------------------------------
   joinRoom(code: string): Promise<void> {
     return new Promise((resolve, reject) => {
       this.status.set('connecting');
+      this.isHost.set(false);
 
       this.peer = new Peer();
 
-      this.peer.on('open', () => {
+      this.peer.on('open', (myId) => {
+        this.myPeerId.set(myId);
+        this.roomCode.set(code);
+
         const conn = this.peer!.connect(code);
         this.setupConnection(conn);
 
         conn.on('open', () => {
-          this.roomCode.set(code);
           this.status.set('connected');
           resolve();
         });
@@ -102,23 +106,19 @@ export class PeerService {
     });
   }
 
-  // -- Broadcast game state to all peers --------------------------------
   broadcastState(state: GameState, myId?: string): void {
     const message: P2PMessage = { type: 'game-state', payload: state };
     this.connections.forEach(conn => {
       if (conn.open) conn.send(message);
     });
-    // Save for potential reconnect
     if (myId) this.saveStateForReconnect(state, myId);
   }
 
-  // -- Send a message to a specific peer --------------------------------
   sendTo(peerId: string, message: P2PMessage): void {
     const conn = this.connections.get(peerId);
     if (conn?.open) conn.send(message);
   }
 
-  // -- Disconnect and clean up ------------------------------------------
   disconnect(): void {
     this.connections.forEach(conn => conn.close());
     this.connections.clear();
@@ -126,23 +126,28 @@ export class PeerService {
     this.peer = null;
     this.status.set('disconnected');
     this.roomCode.set('');
+    this.myPeerId.set('');
     this.peers.set([]);
+    this.isHost.set(false);
   }
 
-  // -- Private helpers --------------------------------------------------
   private setupConnection(conn: DataConnection): void {
     conn.on('open', () => {
       this.connections.set(conn.peer, conn);
       this.peers.update(list => [...list, conn.peer]);
-
-      this.broadcastMessage({
-        type: 'player-joined',
-        payload: { peerId: conn.peer }
-      });
     });
 
     conn.on('data', (data: unknown) => {
-      this.lastMessage.set(data as P2PMessage);
+      const msg = data as P2PMessage;
+      this.lastMessage.set(msg);
+
+      if (this.isHost()) {
+        this.connections.forEach((c, peerId) => {
+          if (peerId !== conn.peer && c.open) {
+            c.send(msg);
+          }
+        });
+      }
     });
 
     conn.on('close', () => {

@@ -24,7 +24,9 @@ export class GameComponent implements OnInit, OnDestroy {
   private peer     = inject(PeerService);
   private diceRef  = viewChild(DiceComponent);
   private audioCtx: AudioContext | null = null;
-  private router = inject(Router);
+  private router   = inject(Router);
+  private pollIntervals: ReturnType<typeof setInterval>[] = [];
+
   showDisconnected    = signal<boolean>(false);
   disconnectedPlayer  = signal<string>('');
 
@@ -40,7 +42,7 @@ export class GameComponent implements OnInit, OnDestroy {
     soundEnabled: true,
     textSize: 'normal',
   });
-  showGameOver      = signal<boolean>(false);
+  showGameOver = signal<boolean>(false);
 
   updateOptions(changes: Partial<GameOptions>): void {
     if (changes.exitGame) {
@@ -64,6 +66,14 @@ export class GameComponent implements OnInit, OnDestroy {
     return this.state().players.filter((p: Player) => p.id !== this.state().currentPlayer);
   }
 
+  get allPlayers(): Player[] {
+    return this.state().players;
+  }
+
+  getPlayerTotal(player: Player): number {
+    return this.yahtzee.grandTotal(player.scoreCard);
+  }
+
   get canRoll(): boolean {
     return this.isMyTurn && this.rollsLeft() > 0 && !this.isOverlayBlocking();
   }
@@ -81,21 +91,20 @@ export class GameComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-  this.watchPeerMessages();
-  this.watchDisconnections();
-  if (this.state().phase === 'lobby') {
-    this.startDemoGame();
-  } else {
-    // Game started from lobby — find our player by peer room code
-    const myId = this.peer.roomCode() || 'player-1';
-    this.myPlayerId.set(myId);
-  }
+    const myId = this.peer.myPeerId();
 
+    if (this.state().phase === 'lobby' || !myId) {
+      this.startDemoGame();
+    } else {
+      this.myPlayerId.set(myId);
+    }
 
-    // Watch for bonus achievement
+    this.watchPeerMessages();
+    this.watchDisconnections();
+
     let bonusAlreadyShown = false;
-    setInterval(() => {
-      const player = this.currentPlayerObj;
+    const bonusInterval = setInterval(() => {
+      const player = this.state().players.find(p => p.id === this.myPlayerId());
       if (!player) return;
       const upper = ['ones','twos','threes','fours','fives','sixes']
         .reduce((sum, cat) => sum + (player.scoreCard[cat as ScoreCategory] ?? 0), 0);
@@ -104,9 +113,11 @@ export class GameComponent implements OnInit, OnDestroy {
         this.showBonusAnimation();
       }
     }, 500);
+    this.pollIntervals.push(bonusInterval);
   }
 
   ngOnDestroy(): void {
+    this.pollIntervals.forEach(id => clearInterval(id));
     this.peer.disconnect();
     this.audioCtx?.close();
   }
@@ -114,7 +125,7 @@ export class GameComponent implements OnInit, OnDestroy {
   rollDice(): void {
     if (!this.canRoll) return;
     const isLastRoll = this.rollsLeft() === 1;
-    
+
     if (this.gameOptions().soundEnabled) {
       isLastRoll ? this.playLastRollSound() : this.playRollSound();
     }
@@ -127,7 +138,7 @@ export class GameComponent implements OnInit, OnDestroy {
 
     setTimeout(() => {
       this.yahtzee.rollDice();
-      this.peer.broadcastState(this.state());
+      this.peer.broadcastState(this.state(), this.myPlayerId());
       this.checkForAchievedCategory();
     }, 100);
   }
@@ -154,153 +165,12 @@ export class GameComponent implements OnInit, OnDestroy {
 
   onOverlayDismissed(): void {
     this.activeOverlay.set(null);
-    // 1 second cooldown after overlay before allowing interaction
     setTimeout(() => this.isOverlayBlocking.set(false), 1000);
-  }
-
-  // -- Roll sound: short rattling noise ------------------------------------
-  private playRollSound(): void {
-    const ctx   = this.getAudioCtx();
-    const count = 6;
-    for (let i = 0; i < count; i++) {
-      setTimeout(() => {
-        const buf  = ctx.createBuffer(1, ctx.sampleRate * 0.04, ctx.sampleRate);
-        const data = buf.getChannelData(0);
-        for (let j = 0; j < data.length; j++) data[j] = (Math.random() * 2 - 1) * 0.3;
-
-        const src    = ctx.createBufferSource();
-        src.buffer   = buf;
-
-        const filter       = ctx.createBiquadFilter();
-        filter.type        = 'bandpass';
-        filter.frequency.value = 800 + Math.random() * 400;
-
-        const gain = ctx.createGain();
-        gain.gain.setValueAtTime(0.4, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
-
-        src.connect(filter).connect(gain).connect(ctx.destination);
-        src.start();
-      }, i * 90);
-    }
-  }
-
-  // -- Last roll sound: lower pitch to signal final roll ------------------
-  private playLastRollSound(): void {
-    const ctx = this.getAudioCtx();
-    this.playRollSound();
-
-    setTimeout(() => {
-      const osc  = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type   = 'sine';
-      osc.frequency.setValueAtTime(520, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(260, ctx.currentTime + 0.4);
-      gain.gain.setValueAtTime(0.15, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.4);
-    }, 550);
-  }
-
-  // -- Achievement sound per category -------------------------------------
-  private playAchievementSound(category: ScoreCategory): void {
-    if (!this.gameOptions().soundEnabled) return;
-    const ctx = this.getAudioCtx();
-
-    if (category === 'yahtzee') {
-      // Lottery fanfare — bells + ascending chord
-      const ctx = this.getAudioCtx();
-
-      // Bell hits
-      [523, 784, 1047, 1319, 1047, 784, 1047, 1319].forEach((freq, i) => {
-        setTimeout(() => {
-          const osc    = ctx.createOscillator();
-          const gain   = ctx.createGain();
-          osc.type     = 'sine';
-          osc.frequency.value = freq;
-          gain.gain.setValueAtTime(0.3, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-          osc.connect(gain).connect(ctx.destination);
-          osc.start();
-          osc.stop(ctx.currentTime + 0.6);
-        }, i * 100);
-      });
-
-      // Harmony layer
-      setTimeout(() => {
-        [523, 659, 784].forEach(freq => {
-          const osc  = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type   = 'triangle';
-          osc.frequency.value = freq;
-          gain.gain.setValueAtTime(0.12, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
-          osc.connect(gain).connect(ctx.destination);
-          osc.start();
-          osc.stop(ctx.currentTime + 1.2);
-        });
-      }, 800);
-
-      return;
-    }
-
-    // Other categories — double chime with unique pitch pair
-    const freqMap: Partial<Record<ScoreCategory, number[]>> = {
-      largeStraight: [659, 880],
-      smallStraight: [587, 740],
-      fullHouse:     [523, 659],
-      fourOfAKind:   [494, 622],
-      threeOfAKind:  [440, 554],
-    };
-
-    const freqs = freqMap[category] ?? [523, 659];
-    freqs.forEach((freq, i) => {
-      setTimeout(() => {
-        const osc  = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type   = 'triangle';
-        osc.frequency.value = freq;
-        gain.gain.setValueAtTime(0.2, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-        osc.connect(gain).connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.35);
-      }, i * 150);
-    });
-  }
-
-  private getAudioCtx(): AudioContext {
-    if (!this.audioCtx) this.audioCtx = new AudioContext();
-    return this.audioCtx;
-  }
-
-  private checkForAchievedCategory(): void {
-    const specialCategories: ScoreCategory[] = [
-      'yahtzee', 'largeStraight', 'smallStraight',
-      'fullHouse', 'fourOfAKind', 'threeOfAKind'
-    ];
-
-    for (const cat of specialCategories) {
-      const alreadyScored = this.currentPlayerObj?.scoreCard[cat] !== null;
-      if (alreadyScored) continue;
-
-      const score = this.yahtzee.previewScore(cat);
-      if (score !== null && score > 0) {
-        setTimeout(() => {
-          this.isOverlayBlocking.set(true);
-          this.activeOverlay.set(cat);
-          this.playAchievementSound(cat);
-        }, 750);
-        return;
-      }
-    }
   }
 
   private watchPeerMessages(): void {
     let lastMessage = this.peer.lastMessage();
-    setInterval(() => {
+    const interval = setInterval(() => {
       const msg = this.peer.lastMessage();
       if (msg && msg !== lastMessage) {
         lastMessage = msg;
@@ -309,11 +179,12 @@ export class GameComponent implements OnInit, OnDestroy {
         }
       }
     }, 100);
+    this.pollIntervals.push(interval);
   }
 
   private watchDisconnections(): void {
     let lastMsg = this.peer.lastMessage();
-    setInterval(() => {
+    const interval = setInterval(() => {
       const msg = this.peer.lastMessage();
       if (msg && msg !== lastMsg) {
         lastMsg = msg;
@@ -325,11 +196,10 @@ export class GameComponent implements OnInit, OnDestroy {
         }
       }
     }, 200);
+    this.pollIntervals.push(interval);
   }
 
-  onContinueWaiting(): void {
-    // Just keep the game paused — player may reconnect
-  }
+  onContinueWaiting(): void {}
 
   onEndGameAfterDisconnect(): void {
     this.showDisconnected.set(false);
@@ -351,10 +221,120 @@ export class GameComponent implements OnInit, OnDestroy {
     }, 400);
   }
 
+  private checkForAchievedCategory(): void {
+    const specialCategories: ScoreCategory[] = [
+      'yahtzee', 'largeStraight', 'smallStraight',
+      'fullHouse', 'fourOfAKind', 'threeOfAKind'
+    ];
+    for (const cat of specialCategories) {
+      const alreadyScored = this.currentPlayerObj?.scoreCard[cat] !== null;
+      if (alreadyScored) continue;
+      const score = this.yahtzee.previewScore(cat);
+      if (score !== null && score > 0) {
+        setTimeout(() => {
+          this.isOverlayBlocking.set(true);
+          this.activeOverlay.set(cat);
+          this.playAchievementSound(cat);
+        }, 750);
+        return;
+      }
+    }
+  }
+
+  private playRollSound(): void {
+    const ctx   = this.getAudioCtx();
+    const count = 6;
+    for (let i = 0; i < count; i++) {
+      setTimeout(() => {
+        const buf  = ctx.createBuffer(1, ctx.sampleRate * 0.04, ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let j = 0; j < data.length; j++) data[j] = (Math.random() * 2 - 1) * 0.3;
+        const src    = ctx.createBufferSource();
+        src.buffer   = buf;
+        const filter       = ctx.createBiquadFilter();
+        filter.type        = 'bandpass';
+        filter.frequency.value = 800 + Math.random() * 400;
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.4, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
+        src.connect(filter).connect(gain).connect(ctx.destination);
+        src.start();
+      }, i * 90);
+    }
+  }
+
+  private playLastRollSound(): void {
+    const ctx = this.getAudioCtx();
+    this.playRollSound();
+    setTimeout(() => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type   = 'sine';
+      osc.frequency.setValueAtTime(520, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(260, ctx.currentTime + 0.4);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.4);
+    }, 550);
+  }
+
+  private playAchievementSound(category: ScoreCategory): void {
+    if (!this.gameOptions().soundEnabled) return;
+    const ctx = this.getAudioCtx();
+    if (category === 'yahtzee') {
+      [523, 784, 1047, 1319, 1047, 784, 1047, 1319].forEach((freq, i) => {
+        setTimeout(() => {
+          const osc    = ctx.createOscillator();
+          const gain   = ctx.createGain();
+          osc.type     = 'sine';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0.3, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+          osc.connect(gain).connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.6);
+        }, i * 100);
+      });
+      setTimeout(() => {
+        [523, 659, 784].forEach(freq => {
+          const osc  = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type   = 'triangle';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0.12, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+          osc.connect(gain).connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 1.2);
+        });
+      }, 800);
+      return;
+    }
+    const freqMap: Partial<Record<ScoreCategory, number[]>> = {
+      largeStraight: [659, 880], smallStraight: [587, 740],
+      fullHouse: [523, 659], fourOfAKind: [494, 622], threeOfAKind: [440, 554],
+    };
+    const freqs = freqMap[category] ?? [523, 659];
+    freqs.forEach((freq, i) => {
+      setTimeout(() => {
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type   = 'triangle';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.35);
+      }, i * 150);
+    });
+  }
+
   private playBonusSound(): void {
     if (!this.gameOptions().soundEnabled) return;
     const ctx = this.getAudioCtx();
-    // Bell-like ascending chime
     const notes = [523, 659, 784, 659, 1047];
     notes.forEach((freq, i) => {
       setTimeout(() => {
@@ -369,6 +349,11 @@ export class GameComponent implements OnInit, OnDestroy {
         osc.stop(ctx.currentTime + 0.5);
       }, i * 100);
     });
+  }
+
+  private getAudioCtx(): AudioContext {
+    if (!this.audioCtx) this.audioCtx = new AudioContext();
+    return this.audioCtx;
   }
 
   onPlayAgain(): void {
@@ -387,7 +372,6 @@ export class GameComponent implements OnInit, OnDestroy {
   private playGameOverSound(): void {
     const ctx = this.getAudioCtx();
     if (!this.gameOptions().soundEnabled) return;
-    // Victory fanfare
     const melody = [523, 659, 784, 1047, 784, 1047, 1319];
     melody.forEach((freq, i) => {
       setTimeout(() => {

@@ -9,7 +9,6 @@
       <p class="logo-sub">Play with friends, no server needed</p>
     </div>
 
-    <!-- RECONNECT BANNER -->
     @if (hasReconnectData()) {
       <div class="reconnect-banner">
         <div class="reconnect-banner__info">
@@ -28,7 +27,6 @@
       </div>
     }
 
-    <!-- HOME VIEW -->
     @if (view() === 'home') {
       <div class="lobby__card">
 
@@ -108,7 +106,6 @@
       </div>
     }
 
-    <!-- CREATE VIEW -->
     @if (view() === 'create') {
       <div class="lobby__card">
         <h2 class="card__title">Create a Room</h2>
@@ -137,7 +134,6 @@
       </div>
     }
 
-    <!-- WAITING VIEW -->
     @if (view() === 'waiting') {
       <div class="lobby__card">
         <h2 class="card__title">Room Created!</h2>
@@ -154,16 +150,16 @@
             <span class="waiting-player__name">{{ nickname() }}</span>
             <span class="waiting-player__tag">Host</span>
           </div>
-          @for (peer of connectedPeers(); track peer) {
+          @for (entry of guestPlayers() | keyvalue; track entry.key) {
             <div class="waiting-player">
               <div class="waiting-player__avatar waiting-player__avatar--guest">
-                {{ (guestNames()[peer] || 'P')[0].toUpperCase() }}
+                {{ entry.value.nickname[0].toUpperCase() }}
               </div>
-              <span class="waiting-player__name">{{ guestNames()[peer] || 'Connecting...' }}</span>
+              <span class="waiting-player__name">{{ entry.value.nickname }}</span>
               <span class="waiting-player__tag waiting-player__tag--connected">Connected</span>
             </div>
           }
-          @for (empty of [].constructor(3 - connectedPeers().length); track $index) {
+          @for (empty of [].constructor(3 - (guestPlayers() | keyvalue).length); track $index) {
             <div class="waiting-player waiting-player--empty">
               <div class="waiting-player__avatar waiting-player__avatar--empty"></div>
               <span class="waiting-player__name">Waiting...</span>
@@ -172,16 +168,21 @@
         </div>
 
         <div class="lobby__actions">
-          <button class="btn btn--primary" (click)="startGame()">
-            Start Game ({{ connectedPeers().length + 1 }}
-            {{ connectedPeers().length + 1 === 1 ? 'player' : 'players' }})
-          </button>
+          @if (peer.isHost()) {
+            <button
+              class="btn btn--primary"
+              [disabled]="totalPlayers < 2"
+              (click)="startGame()">
+              Start Game ({{ totalPlayers }} {{ totalPlayers === 1 ? 'player' : 'players' }})
+            </button>
+          } @else {
+            <p class="card__sub">Waiting for host to start the game...</p>
+          }
           <button class="btn btn--ghost" (click)="view.set('home')">Cancel</button>
         </div>
       </div>
     }
 
-    <!-- JOIN VIEW -->
     @if (view() === 'join') {
       <div class="lobby__card">
         <h2 class="card__title">Join a Room</h2>
