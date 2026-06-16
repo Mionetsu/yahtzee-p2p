@@ -1,0 +1,254 @@
+// -- Modern view ----------------------------------------------------------
+.scorecard {
+  width: 100%;
+  max-width: 360px;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 16px;
+  overflow: hidden;
+  font-family: var(--font-sans, 'Inter', sans-serif);
+  color: #fff;
+  font-size: 14px;
+  transition: font-size .2s, max-width .2s;
+
+  &--large  { font-size: 17px; max-width: 420px; }
+  &--xlarge { font-size: 22px; max-width: 520px; }
+
+  &__header {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__section-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: rgba(255,255,255,0.4);
+    padding: 6px 14px 2px;
+    background: rgba(0,0,0,0.2);
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    padding: 6px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    transition: background .15s;
+    cursor: default;
+    gap: 6px;
+
+    &--scorable {
+      cursor: pointer;
+      background: rgba(255, 220, 50, 0.08);
+      &:hover { background: rgba(255, 220, 50, 0.18); }
+    }
+
+    &--scored { opacity: 0.7; }
+    &--yahtzee .row-label { color: #FFD700; font-weight: 600; }
+  }
+
+  &__subtotal,
+  &__bonus {
+    display: flex;
+    align-items: center;
+    padding: 6px 14px;
+    background: rgba(0,0,0,0.25);
+    border-top: 1px solid rgba(255,255,255,0.1);
+    gap: 6px;
+  }
+
+  &__total {
+    display: flex;
+    align-items: center;
+    padding: 6px 14px;
+    background: rgba(0,0,0,0.4);
+    border-top: 2px solid rgba(255,255,255,0.2);
+    gap: 6px;
+  }
+}
+
+// -- Classic view — same layout as modern, different colors ---------------
+.scorecard-classic {
+  width: 100%;
+  max-width: 360px;
+  background: #f0ead8;
+  border: 1px solid #9a9a8a;
+  border-radius: 16px;
+  overflow: hidden;
+  font-family: var(--font-sans, 'Inter', sans-serif);
+  color: #1a1a1a;
+  font-size: 14px;
+  transition: font-size .2s, max-width .2s;
+
+  &--large  { font-size: 17px; max-width: 420px; }
+  &--xlarge { font-size: 22px; max-width: 520px; }
+
+  .scorecard__header {
+    background: #d8d0b8;
+    padding: 10px 14px;
+    border-bottom: 1px solid #9a9a8a;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .scorecard__section-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: #5a5040;
+    padding: 6px 14px 2px;
+    background: #e0d8c0;
+  }
+
+  .scorecard__row {
+    display: flex;
+    align-items: center;
+    padding: 6px 14px;
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    transition: background .15s;
+    cursor: default;
+    gap: 6px;
+    background: #f0ead8;
+
+    &--scorable {
+      cursor: pointer;
+      background: rgba(180,140,0,0.08);
+      &:hover { background: rgba(180,140,0,0.18); }
+    }
+
+    &--scored { opacity: 0.7; }
+    &--yahtzee .row-label { color: #8B1a00; font-weight: 600; }
+  }
+
+  .scorecard__subtotal,
+  .scorecard__bonus {
+    display: flex;
+    align-items: center;
+    padding: 6px 14px;
+    background: #b8b8a8;
+    border-top: 1px solid #9a9a8a;
+    gap: 6px;
+  }
+
+  .scorecard__total {
+    display: flex;
+    align-items: center;
+    padding: 6px 14px;
+    background: #a8a898;
+    border-top: 2px solid #9a9a8a;
+    gap: 6px;
+  }
+
+  .player-avatar { background: #7a6030; }
+  .player-avatar--other { background: rgba(0,0,0,0.15); }
+  .player-name  { color: #1a1a1a; }
+  .player-total { color: #5a5040; }
+
+  .score {
+    &--current {
+      background: rgba(180,140,0,0.15);
+      color: #5a3800;
+    }
+    &--other   { color: #c8a800; }
+    &--preview { color: rgba(120,90,0,0.5); }
+    &--earned  { color: #1a7a00; }
+  }
+
+  .subtotal-label, .bonus-label, .total-label {
+    color: #3a3020;
+  }
+
+  .bonus-hint { color: #6a6050; }
+}
+
+// -- Shared layout tokens (used by both modern and classic) ----------------
+.player-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 44px;
+
+  &--current { flex: 1; flex-direction: row; gap: 8px; align-items: center; }
+}
+
+.player-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #5B4FE8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+  flex-shrink: 0;
+  color: #fff;
+
+  &--other {
+    width: 24px;
+    height: 24px;
+    font-size: 11px;
+    background: rgba(255,255,255,0.15);
+  }
+}
+
+.player-name  { font-size: 14px; font-weight: 500; color: #fff; }
+.player-total { font-size: 12px; color: rgba(255,255,255,0.6); }
+
+.row-icon { font-size: 16px; flex-shrink: 0; }
+.row-label { flex: 1; }
+
+.row-scores,
+.subtotal-values,
+.bonus-values,
+.total-values {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+}
+
+.score {
+  min-width: 34px;
+  text-align: center;
+  font-weight: 500;
+
+  &--current {
+    background: rgba(255,220,50,0.15);
+    border-radius: 4px;
+    padding: 2px 6px;
+    color: #FFE566;
+    min-width: 38px;
+  }
+
+  &--other   { color: rgba(255,255,255,0.45); min-width: 30px; }
+  &--preview { color: rgba(255,220,50,0.5); font-style: italic; }
+  &--earned  { color: #4ade80; font-weight: 700; }
+  &--total   { font-size: 1.1em; font-weight: 700; }
+}
+
+.subtotal-label, .bonus-label, .total-label {
+  flex: 1;
+  font-size: .85em;
+  font-weight: 600;
+  color: rgba(255,255,255,0.6);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.bonus-hint {
+  font-size: .75em;
+  color: rgba(255,255,255,0.3);
+  margin-right: 8px;
+  max-width: 100px;
+  line-height: 1.3;
+}

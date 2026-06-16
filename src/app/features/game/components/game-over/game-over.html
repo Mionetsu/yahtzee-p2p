@@ -1,0 +1,112 @@
+@if (visible()) {
+  <div class="game-over" #overlayRef>
+    <div class="game-over__content" #contentRef>
+
+      <div class="game-over__title">Game Over!</div>
+
+      <div class="game-over__winner">
+        <div class="winner-avatar"
+          [style.background]="sortedPlayers[0]?.avatarImage ? 'transparent' : (sortedPlayers[0]?.avatarColor || '#AEC6FF')">
+          @if (sortedPlayers[0]?.avatarImage) {
+            <img [src]="sortedPlayers[0].avatarImage" class="winner-avatar__img" />
+          } @else {
+            <span>{{ sortedPlayers[0]?.name[0]?.toUpperCase() }}</span>
+          }
+        </div>
+        <div class="winner-info">
+          <span class="winner-label">Winner</span>
+          <span class="winner-name">{{ sortedPlayers[0]?.name }}</span>
+          <span class="winner-score">{{ sortedPlayers[0]?.total }} pts</span>
+        </div>
+      </div>
+
+      @if (sortedPlayers.length > 1) {
+        <div class="game-over__rankings">
+          @for (player of sortedPlayers; track player.id; let i = $index) {
+            @if (i > 0) {
+              <div class="ranking-row">
+                <span class="ranking-medal">{{ medalFor(i) }}</span>
+                <span class="ranking-name">{{ player.name }}</span>
+                <span class="ranking-score">{{ player.total }} pts</span>
+              </div>
+            }
+          }
+        </div>
+      }
+
+      <div class="game-over__actions">
+        <button class="btn-play-again" (click)="playAgain.emit()">Play Again</button>
+        <button class="btn-screenshot" (click)="takeScreenshot()">&#128247; Save Results</button>
+        <button class="btn-lobby" (click)="exitToLobby.emit()">Back to Lobby</button>
+      </div>
+
+    </div>
+  </div>
+}
+
+<!-- Hidden screenshot target -->
+<div class="screenshot-target" #screenshotRef style="display:none">
+  <div class="ss-header">
+    <div class="ss-title">&#9861; Yahtzee P2P — Final Results</div>
+    <div class="ss-date">{{ sortedPlayers[0]?.total }} pts winner</div>
+  </div>
+
+  <div class="ss-players">
+    @for (player of sortedPlayers; track player.id; let i = $index) {
+      <div class="ss-player">
+
+        <div class="ss-player-header">
+          <div class="ss-avatar"
+            [style.background]="player.avatarImage ? 'transparent' : player.avatarColor">
+            @if (player.avatarImage) {
+              <img [src]="player.avatarImage" class="ss-avatar__img" />
+            } @else {
+              <span>{{ player.name[0]?.toUpperCase() }}</span>
+            }
+          </div>
+          <div class="ss-player-info">
+            <span class="ss-medal">{{ medalFor(i) }}</span>
+            <span class="ss-name">{{ player.name }}</span>
+          </div>
+          <span class="ss-total">{{ player.total }} pts</span>
+        </div>
+
+        <table class="ss-table">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Score</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of upperRows; track row.category) {
+              <tr>
+                <td>{{ row.label }}</td>
+                <td>{{ player.scoreCard[row.category] ?? '-' }}</td>
+              </tr>
+            }
+            <tr class="ss-subtotal">
+              <td>Subtotal</td>
+              <td>{{ upperTotal(player.scoreCard) }}/63</td>
+            </tr>
+            <tr class="ss-bonus">
+              <td>+35 Bonus</td>
+              <td>{{ hasBonus(player.scoreCard) ? '35' : '0' }}</td>
+            </tr>
+            @for (row of lowerRows; track row.category) {
+              <tr>
+                <td>{{ row.label }}</td>
+                <td>{{ player.scoreCard[row.category] ?? '-' }}</td>
+              </tr>
+            }
+            <tr class="ss-grand-total">
+              <td>Total</td>
+              <td>{{ grandTotal(player.scoreCard) }}</td>
+            </tr>
+          </tbody>
+        </table>
+
+      </div>
+    }
+  </div>
+</div>

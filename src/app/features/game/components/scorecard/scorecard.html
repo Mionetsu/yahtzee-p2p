@@ -1,0 +1,215 @@
+@if (viewMode() === 'modern') {
+<div class="scorecard"
+  [class.scorecard--large]="textSize() === 'large'"
+  [class.scorecard--xlarge]="textSize() === 'xlarge'">
+
+  <div class="scorecard__header">
+    <div class="scorecard__players">
+      <div class="player-col player-col--current">
+        <app-player-avatar
+          [name]="currentPlayer().name"
+          [avatarColor]="currentPlayer().avatarColor"
+          [avatarImage]="currentPlayer().avatarImage"
+          size="sm" />
+        <span class="player-name">{{ currentPlayer().name }}</span>
+      </div>
+      @for (p of otherPlayers(); track p.id) {
+        <div class="player-col player-col--other">
+          <app-player-avatar
+            [name]="p.name"
+            [avatarColor]="p.avatarColor"
+            [avatarImage]="p.avatarImage"
+            size="sm" />
+          <span class="player-total">{{ grandTotal(p.scoreCard) }}</span>
+        </div>
+      }
+    </div>
+  </div>
+
+  <div class="scorecard__section-label">Categories</div>
+  @for (row of upperRows; track row.category) {
+    <div class="scorecard__row"
+      [class.scorecard__row--scorable]="canScore(row.category)"
+      [class.scorecard__row--scored]="getScore(currentPlayer().scoreCard, row.category) !== null"
+      (click)="selectCategory(row.category)">
+      <span class="row-icon">{{ row.icon }}</span>
+      <span class="row-label">{{ row.label }}</span>
+      <div class="row-scores">
+        <span class="score score--current">
+          @if (getScore(currentPlayer().scoreCard, row.category) !== null) {
+            {{ getScore(currentPlayer().scoreCard, row.category) }}
+          } @else if (getPreview(row.category) !== null && isMyTurn() && rollsLeft() < 3) {
+            <span class="score--preview">{{ getPreview(row.category) }}</span>
+          }
+        </span>
+        @for (p of otherPlayers(); track p.id) {
+          <span class="score score--other">{{ getScore(p.scoreCard, row.category) ?? '' }}</span>
+        }
+      </div>
+    </div>
+  }
+
+  <div class="scorecard__subtotal">
+    <span class="subtotal-label">Subtotal</span>
+    <div class="subtotal-values">
+      <span class="score score--current">{{ upperTotal(currentPlayer().scoreCard) }}/63</span>
+      @for (p of otherPlayers(); track p.id) {
+        <span class="score score--other">{{ upperTotal(p.scoreCard) }}/63</span>
+      }
+    </div>
+  </div>
+
+  <div class="scorecard__bonus">
+    <span class="bonus-label">+35 Bonus</span>
+    <span class="bonus-hint">over 63 pts</span>
+    <div class="bonus-values">
+      <span class="score score--current" [class.score--earned]="hasBonus(currentPlayer().scoreCard)">
+        {{ hasBonus(currentPlayer().scoreCard) ? '35' : '0' }}
+      </span>
+      @for (p of otherPlayers(); track p.id) {
+        <span class="score score--other" [class.score--earned]="hasBonus(p.scoreCard)">
+          {{ hasBonus(p.scoreCard) ? '35' : '0' }}
+        </span>
+      }
+    </div>
+  </div>
+
+  <div class="scorecard__section-label">Lower Section</div>
+  @for (row of lowerRows; track row.category) {
+    <div class="scorecard__row"
+      [class.scorecard__row--scorable]="canScore(row.category)"
+      [class.scorecard__row--scored]="getScore(currentPlayer().scoreCard, row.category) !== null"
+      [class.scorecard__row--yahtzee]="row.category === 'yahtzee'"
+      (click)="selectCategory(row.category)">
+      <span class="row-icon">{{ row.icon }}</span>
+      <span class="row-label">{{ row.label }}</span>
+      <div class="row-scores">
+        <span class="score score--current">
+          @if (getScore(currentPlayer().scoreCard, row.category) !== null) {
+            {{ getScore(currentPlayer().scoreCard, row.category) }}
+          } @else if (getPreview(row.category) !== null && isMyTurn() && rollsLeft() < 3) {
+            <span class="score--preview">{{ getPreview(row.category) }}</span>
+          }
+        </span>
+        @for (p of otherPlayers(); track p.id) {
+          <span class="score score--other">{{ getScore(p.scoreCard, row.category) ?? '' }}</span>
+        }
+      </div>
+    </div>
+  }
+
+  <div class="scorecard__total">
+    <span class="total-label">Total</span>
+    <div class="total-values">
+      <span class="score score--current score--total">{{ grandTotal(currentPlayer().scoreCard) }}</span>
+      @for (p of otherPlayers(); track p.id) {
+        <span class="score score--other score--total">{{ grandTotal(p.scoreCard) }}</span>
+      }
+    </div>
+  </div>
+
+</div>
+} @else {
+<div class="scorecard-classic"
+  [class.scorecard-classic--large]="textSize() === 'large'"
+  [class.scorecard-classic--xlarge]="textSize() === 'xlarge'">
+
+  <div class="scorecard__header">
+    <div class="scorecard__players">
+      <div class="player-col player-col--current">
+        <div class="player-avatar">{{ currentPlayer().name[0] }}</div>
+        <span class="player-name">{{ currentPlayer().name }}</span>
+      </div>
+      @for (p of otherPlayers(); track p.id) {
+        <div class="player-col player-col--other">
+          <div class="player-avatar player-avatar--other">{{ p.name[0] }}</div>
+          <span class="player-total">{{ grandTotal(p.scoreCard) }}</span>
+        </div>
+      }
+    </div>
+  </div>
+
+  <div class="scorecard__section-label">Categories</div>
+  @for (row of upperRows; track row.category) {
+    <div class="scorecard__row"
+      [class.scorecard__row--scorable]="canScore(row.category)"
+      [class.scorecard__row--scored]="getScore(currentPlayer().scoreCard, row.category) !== null"
+      (click)="selectCategory(row.category)">
+      <span class="row-icon">{{ row.icon }}</span>
+      <span class="row-label">{{ row.label }}</span>
+      <div class="row-scores">
+        <span class="score score--current">
+          @if (getScore(currentPlayer().scoreCard, row.category) !== null) {
+            {{ getScore(currentPlayer().scoreCard, row.category) }}
+          } @else if (getPreview(row.category) !== null && isMyTurn() && rollsLeft() < 3) {
+            <span class="score--preview">{{ getPreview(row.category) }}</span>
+          }
+        </span>
+        @for (p of otherPlayers(); track p.id) {
+          <span class="score score--other">{{ getScore(p.scoreCard, row.category) ?? '' }}</span>
+        }
+      </div>
+    </div>
+  }
+
+  <div class="scorecard__subtotal">
+    <span class="subtotal-label">Subtotal</span>
+    <div class="subtotal-values">
+      <span class="score score--current">{{ upperTotal(currentPlayer().scoreCard) }}/63</span>
+      @for (p of otherPlayers(); track p.id) {
+        <span class="score score--other">{{ upperTotal(p.scoreCard) }}/63</span>
+      }
+    </div>
+  </div>
+
+  <div class="scorecard__bonus">
+    <span class="bonus-label">+35 Bonus</span>
+    <span class="bonus-hint">over 63 pts</span>
+    <div class="bonus-values">
+      <span class="score score--current" [class.score--earned]="hasBonus(currentPlayer().scoreCard)">
+        {{ hasBonus(currentPlayer().scoreCard) ? '35' : '0' }}
+      </span>
+      @for (p of otherPlayers(); track p.id) {
+        <span class="score score--other" [class.score--earned]="hasBonus(p.scoreCard)">
+          {{ hasBonus(p.scoreCard) ? '35' : '0' }}
+        </span>
+      }
+    </div>
+  </div>
+
+  <div class="scorecard__section-label">Lower Section</div>
+  @for (row of lowerRows; track row.category) {
+    <div class="scorecard__row"
+      [class.scorecard__row--scorable]="canScore(row.category)"
+      [class.scorecard__row--scored]="getScore(currentPlayer().scoreCard, row.category) !== null"
+      [class.scorecard__row--yahtzee]="row.category === 'yahtzee'"
+      (click)="selectCategory(row.category)">
+      <span class="row-icon">{{ row.icon }}</span>
+      <span class="row-label">{{ row.label }}</span>
+      <div class="row-scores">
+        <span class="score score--current">
+          @if (getScore(currentPlayer().scoreCard, row.category) !== null) {
+            {{ getScore(currentPlayer().scoreCard, row.category) }}
+          } @else if (getPreview(row.category) !== null && isMyTurn() && rollsLeft() < 3) {
+            <span class="score--preview">{{ getPreview(row.category) }}</span>
+          }
+        </span>
+        @for (p of otherPlayers(); track p.id) {
+          <span class="score score--other">{{ getScore(p.scoreCard, row.category) ?? '' }}</span>
+        }
+      </div>
+    </div>
+  }
+
+  <div class="scorecard__total">
+    <span class="total-label">Total</span>
+    <div class="total-values">
+      <span class="score score--current score--total">{{ grandTotal(currentPlayer().scoreCard) }}</span>
+      @for (p of otherPlayers(); track p.id) {
+        <span class="score score--other score--total">{{ grandTotal(p.scoreCard) }}</span>
+      }
+    </div>
+  </div>
+
+</div>
+}

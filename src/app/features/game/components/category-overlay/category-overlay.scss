@@ -1,0 +1,82 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+.overlay__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 48px 64px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 0 60px var(--glow),
+    0 0 120px var(--glow),
+    inset 0 0 40px rgba(255,255,255,0.03);
+}
+
+.overlay__emoji {
+  font-size: 72px;
+  line-height: 1;
+  filter: drop-shadow(0 0 20px var(--glow, rgba(255,255,255,0.3)));
+}
+
+.overlay__label {
+  font-size: 42px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-align: center;
+  text-shadow:
+    0 0 30px var(--glow),
+    0 0 60px var(--glow);
+  line-height: 1.1;
+}
+
+// Confetti particles for Yahtzee only
+.particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.particle {
+  --i: 1;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: hsl(calc(var(--i) * 30), 90%, 60%);
+  animation: burst 2.5s ease-out forwards;
+  animation-delay: calc(var(--i) * 0.05s);
+  transform-origin: center;
+}
+
+@keyframes burst {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform:
+      translate(
+        calc(-50% + (cos(calc(var(--i) * 30deg)) * 280px)),
+        calc(-50% + (sin(calc(var(--i) * 30deg)) * 280px))
+      )
+      rotate(720deg)
+      scale(0);
+    opacity: 0;
+  }
+}

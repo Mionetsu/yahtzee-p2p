@@ -1,0 +1,93 @@
+<div class="game-board" [class.game--blocked]="isOverlayBlocking()">
+  <div class="game-board__bg"></div>
+
+  <header class="game-header">
+    <div class="game-header__room">
+      <span class="room-label">Room</span>
+      <span class="room-code">{{ state().roomCode }}</span>
+    </div>
+    <div class="game-header__turn">
+      <span class="turn-label">Turn {{ state().turn }}</span>
+    </div>
+    <div class="game-header__right">
+      <div class="game-header__phase" [class.phase--my-turn]="isMyTurn">
+        {{ isMyTurn ? 'Your turn' : (currentPlayerObj?.name + "'s turn") }}
+      </div>
+      <app-options-menu
+        [options]="gameOptions()"
+        (optionsChanged)="updateOptions($event)" />
+    </div>
+  </header>
+
+  <main class="game-main">
+    @if (currentPlayerObj) {
+      <aside class="game-sidebar">
+        <app-scorecard
+          [currentPlayer]="currentPlayerObj"
+          [otherPlayers]="otherPlayers"
+          [previews]="previews"
+          [isMyTurn]="isMyTurn"
+          [rollsLeft]="rollsLeft()"
+          [textSize]="gameOptions().textSize"
+          [viewMode]="gameOptions().scorecardView"
+          (categorySelected)="scoreCategory($event)" />
+      </aside>
+    }
+
+    <section class="game-center">
+  <app-players-hud
+    [players]="state().players"
+    [currentPlayerId]="state().currentPlayer" />
+
+  <div class="dice-roll-area">
+    <app-dice
+      [dice]="dice()"
+      [canHold]="isMyTurn && rollsLeft() < 3"
+      [isBlocked]="isOverlayBlocking()"
+      [rollsLeft]="rollsLeft()"
+      (dieToggled)="toggleHold($event)" />
+
+    <div class="roll-area">
+      <button
+        class="roll-btn"
+        [class.roll-btn--disabled]="!canRoll"
+        [disabled]="!canRoll"
+        (click)="rollDice()">
+        @if (rollsLeft() === 3) {
+          Roll Dice
+        } @else if (rollsLeft() > 0) {
+          Roll Again ({{ rollsLeft() }} left)
+        } @else {
+          No rolls left — pick a category
+        }
+      </button>
+      <div class="roll-pips">
+        @for (n of [1,2,3]; track n) {
+          <div class="pip" [class.pip--used]="n > rollsLeft()"></div>
+        }
+      </div>
+    </div>
+  </div>
+
+  <div></div>
+</section>
+  </main>
+
+  <app-category-overlay
+    [category]="activeOverlay()"
+    (dismissed)="onOverlayDismissed()" />
+
+  <app-game-over
+    [players]="state().players"
+    [visible]="showGameOver()"
+    (playAgain)="onPlayAgain()"
+    (exitToLobby)="onExitToLobby()" />
+  
+  <app-player-disconnected
+    [playerName]="disconnectedPlayer()"
+    [visible]="showDisconnected()"
+    [waitSeconds]="60"
+    (continueWaiting)="onContinueWaiting()"
+    (endGame)="onEndGameAfterDisconnect()" />
+
+</div>

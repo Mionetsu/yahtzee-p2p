@@ -1,0 +1,19 @@
+<div class="players-hud">
+  @for (player of players(); track player.id) {
+    <div class="player-card"
+      [class.player-card--active]="player.id === currentPlayerId()">
+      <app-player-avatar
+        [name]="player.name"
+        [avatarColor]="player.avatarColor"
+        [avatarImage]="player.avatarImage"
+        size="md" />
+      <div class="player-card__info">
+        <span class="player-card__name">{{ player.name }}</span>
+        <span class="player-card__score">{{ grandTotal(player.scoreCard) }}</span>
+      </div>
+      @if (player.id === currentPlayerId()) {
+        <div class="player-card__turn-dot"></div>
+      }
+    </div>
+  }
+</div>

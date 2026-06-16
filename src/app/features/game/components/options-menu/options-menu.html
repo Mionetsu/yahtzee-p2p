@@ -1,0 +1,62 @@
+<div class="options-menu">
+  <button class="options-btn" (click)="toggle()" [class.options-btn--active]="isOpen">
+    <span class="dot"></span>
+    <span class="dot"></span>
+    <span class="dot"></span>
+  </button>
+
+  @if (isOpen) {
+    <div class="options-dropdown">
+
+      <div class="options-section">
+        <div class="options-section__label">Scorecard View</div>
+        <div class="options-row"
+          [class.options-row--active]="options().scorecardView === 'modern'"
+          (click)="set({ scorecardView: 'modern' })">
+          <span class="options-icon">&#10022;</span>
+          <span>Modern</span>
+          @if (options().scorecardView === 'modern') {
+            <span class="options-check">&#10003;</span>
+          }
+        </div>
+        <div class="options-row"
+          [class.options-row--active]="options().scorecardView === 'classic'"
+          (click)="set({ scorecardView: 'classic' })">
+          <span class="options-icon">&#9638;</span>
+          <span>Classic</span>
+          @if (options().scorecardView === 'classic') {
+            <span class="options-check">&#10003;</span>
+          }
+        </div>
+      </div>
+
+      <div class="options-divider"></div>
+
+      <div class="options-section">
+        <div class="options-section__label">Display</div>
+        <div class="options-row" (click)="cycleTextSize(); $event.stopPropagation()">
+          <span class="options-icon">Aa</span>
+          <span>Text Size</span>
+          <span class="options-badge">{{ textSizeLabel() }}</span>
+        </div>
+        <div class="options-row" (click)="set({ soundEnabled: !options().soundEnabled })">
+          <span class="options-icon">{{ soundIcon() }}</span>
+          <span>Sound</span>
+          @if (options().soundEnabled) {
+            <span class="options-check">&#10003;</span>
+          }
+        </div>
+      </div>
+
+      <div class="options-divider"></div>
+
+      <div class="options-section">
+        <div class="options-row options-row--danger" (click)="set({ exitGame: true })">
+          <span class="options-icon">&#8592;</span>
+          <span>Exit Game</span>
+        </div>
+      </div>
+
+    </div>
+  }
+</div>

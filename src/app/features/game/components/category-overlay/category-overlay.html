@@ -1,0 +1,22 @@
+@if (visible && config) {
+  <div class="overlay" #overlayRef>
+
+    @if (category() === 'yahtzee') {
+      <div class="particles">
+        @for (p of [1,2,3,4,5,6,7,8,9,10,11,12]; track p) {
+          <div class="particle" [style.--i]="p"></div>
+        }
+      </div>
+    }
+
+    <div class="overlay__content" #contentRef
+      [style.--glow]="config.glow"
+      [style.--color]="config.color">
+      <div class="overlay__emoji">{{ config.emoji }}</div>
+      <div class="overlay__label" [style.color]="config.color">
+        {{ config.label }}
+      </div>
+    </div>
+
+  </div>
+}

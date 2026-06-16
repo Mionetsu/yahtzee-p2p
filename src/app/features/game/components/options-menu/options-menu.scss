@@ -1,0 +1,123 @@
+.options-menu {
+  position: relative;
+}
+
+.options-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.06);
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+  padding: 0;
+
+  &:hover { background: rgba(255,255,255,0.12); }
+
+  &--active {
+    background: rgba(255,255,255,0.15);
+    border-color: rgba(255,255,255,0.25);
+  }
+}
+
+.dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.8);
+}
+
+.options-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 200px;
+  background: rgba(20, 20, 35, 0.95);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  padding: 8px;
+  z-index: 100;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  animation: dropIn .15s ease-out;
+}
+
+@keyframes dropIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.options-section {
+  padding: 4px 0;
+}
+
+.options-section__label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: rgba(255,255,255,0.35);
+  padding: 4px 10px 6px;
+}
+
+.options-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: rgba(255,255,255,0.8);
+  transition: background .12s;
+
+  &:hover { background: rgba(255,255,255,0.08); }
+
+  &--active {
+    color: #fff;
+    font-weight: 500;
+  }
+}
+
+.options-icon {
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+  color: rgba(255,255,255,0.5);
+  flex-shrink: 0;
+}
+
+.options-check {
+  margin-left: auto;
+  color: #4ade80;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.options-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.08);
+  margin: 4px 0;
+}
+
+.options-badge {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(91, 79, 232, 0.6);
+  border: 1px solid rgba(91, 79, 232, 0.8);
+  border-radius: 4px;
+  padding: 1px 7px;
+}
+
+.options-row--danger {
+  color: #f87171;
+  &:hover { background: rgba(248,113,113,0.1); }
+  .options-icon { color: #f87171; }
+}

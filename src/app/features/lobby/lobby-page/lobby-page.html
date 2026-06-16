@@ -1,0 +1,224 @@
+<div class="lobby">
+  <div class="lobby__bg"></div>
+
+  <div class="lobby__content">
+
+    <div class="lobby__logo">
+      <div class="logo-dice">&#9861;</div>
+      <h1 class="logo-title">Yahtzee P2P</h1>
+      <p class="logo-sub">Play with friends, no server needed</p>
+    </div>
+
+    <!-- RECONNECT BANNER -->
+    @if (hasReconnectData()) {
+      <div class="reconnect-banner">
+        <div class="reconnect-banner__info">
+          <span class="reconnect-banner__icon">&#9889;</span>
+          <div>
+            <div class="reconnect-banner__title">Unfinished game found</div>
+            <div class="reconnect-banner__sub">Room: {{ reconnectRoomCode() }}</div>
+          </div>
+        </div>
+        <div class="reconnect-banner__actions">
+          <button class="btn btn--primary" [disabled]="isLoading()" (click)="reconnectToGame()">
+            @if (isLoading()) { Connecting... } @else { Rejoin }
+          </button>
+          <button class="btn btn--ghost" (click)="dismissReconnect()">Dismiss</button>
+        </div>
+      </div>
+    }
+
+    <!-- HOME VIEW -->
+    @if (view() === 'home') {
+      <div class="lobby__card">
+
+        <div class="avatar-picker">
+          <div class="avatar-picker__preview"
+            [style.background]="selectedImage() ? 'transparent' : selectedColor()"
+            (click)="triggerImageUpload()">
+            @if (selectedImage()) {
+              <img [src]="selectedImage()" class="avatar-picker__img" />
+            } @else {
+              <svg viewBox="0 0 24 24" fill="none" class="avatar-picker__icon">
+                <circle cx="12" cy="8" r="4" fill="rgba(0,0,0,0.45)"/>
+                <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"
+                  stroke="rgba(0,0,0,0.45)" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            }
+            <div class="avatar-picker__overlay">
+              <span>&#128247;</span>
+            </div>
+          </div>
+          <input #fileInput type="file" accept="image/*" class="avatar-picker__file"
+            (change)="onImageSelected($event)" />
+          <div class="avatar-picker__colors">
+            @for (color of avatarColors; track color) {
+              <button
+                class="color-dot"
+                [style.background]="color"
+                [class.color-dot--active]="selectedColor() === color && !selectedImage()"
+                (click)="selectColor(color)">
+              </button>
+            }
+            @if (selectedImage()) {
+              <button class="color-dot color-dot--clear" (click)="clearImage()">
+                &#10005;
+              </button>
+            }
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field__label">Your nickname</label>
+          <input
+            class="field__input"
+            type="text"
+            placeholder="Enter your name..."
+            maxlength="16"
+            [ngModel]="nickname()"
+            (ngModelChange)="nickname.set($event)" />
+        </div>
+
+        <div class="lobby__actions">
+          <button
+            class="btn btn--primary"
+            [class.btn--disabled]="!canProceed"
+            [disabled]="!canProceed"
+            (click)="view.set('create')">
+            &#43; Create Room
+          </button>
+          <button
+            class="btn btn--secondary"
+            [class.btn--disabled]="!canProceed"
+            [disabled]="!canProceed"
+            (click)="view.set('join')">
+            &#8594; Join Room
+          </button>
+        </div>
+
+        <div class="lobby__divider"><span>or</span></div>
+
+        <button class="btn btn--ghost btn--solo" (click)="playSolo()">
+          &#9654; Play Solo (practice)
+        </button>
+
+        @if (!canProceed && nickname().length > 0) {
+          <p class="lobby__hint">Nickname must be at least 2 characters</p>
+        }
+      </div>
+    }
+
+    <!-- CREATE VIEW -->
+    @if (view() === 'create') {
+      <div class="lobby__card">
+        <h2 class="card__title">Create a Room</h2>
+        <p class="card__sub">A room code will be generated for your friend to join</p>
+
+        <div class="player-preview">
+          <div class="player-preview__avatar">{{ nickname()[0]?.toUpperCase() }}</div>
+          <span class="player-preview__name">{{ nickname() }}</span>
+          <span class="player-preview__badge">Host</span>
+        </div>
+
+        @if (errorMsg()) {
+          <p class="error-msg">{{ errorMsg() }}</p>
+        }
+
+        <div class="lobby__actions">
+          <button
+            class="btn btn--primary"
+            [class.btn--loading]="isLoading()"
+            [disabled]="isLoading()"
+            (click)="createRoom()">
+            @if (isLoading()) { Creating... } @else { Create Room }
+          </button>
+          <button class="btn btn--ghost" (click)="view.set('home')">Back</button>
+        </div>
+      </div>
+    }
+
+    <!-- WAITING VIEW -->
+    @if (view() === 'waiting') {
+      <div class="lobby__card">
+        <h2 class="card__title">Room Created!</h2>
+        <p class="card__sub">Share this code with your friend</p>
+
+        <div class="room-code-display">
+          <span class="room-code-display__code">{{ roomCode() }}</span>
+          <button class="room-code-display__copy" (click)="copyCode()">Copy</button>
+        </div>
+
+        <div class="waiting-players">
+          <div class="waiting-player waiting-player--host">
+            <div class="waiting-player__avatar">{{ nickname()[0]?.toUpperCase() }}</div>
+            <span class="waiting-player__name">{{ nickname() }}</span>
+            <span class="waiting-player__tag">Host</span>
+          </div>
+          @for (peer of connectedPeers(); track peer) {
+            <div class="waiting-player">
+              <div class="waiting-player__avatar waiting-player__avatar--guest">
+                {{ (guestNames()[peer] || 'P')[0].toUpperCase() }}
+              </div>
+              <span class="waiting-player__name">{{ guestNames()[peer] || 'Connecting...' }}</span>
+              <span class="waiting-player__tag waiting-player__tag--connected">Connected</span>
+            </div>
+          }
+          @for (empty of [].constructor(3 - connectedPeers().length); track $index) {
+            <div class="waiting-player waiting-player--empty">
+              <div class="waiting-player__avatar waiting-player__avatar--empty"></div>
+              <span class="waiting-player__name">Waiting...</span>
+            </div>
+          }
+        </div>
+
+        <div class="lobby__actions">
+          <button class="btn btn--primary" (click)="startGame()">
+            Start Game ({{ connectedPeers().length + 1 }}
+            {{ connectedPeers().length + 1 === 1 ? 'player' : 'players' }})
+          </button>
+          <button class="btn btn--ghost" (click)="view.set('home')">Cancel</button>
+        </div>
+      </div>
+    }
+
+    <!-- JOIN VIEW -->
+    @if (view() === 'join') {
+      <div class="lobby__card">
+        <h2 class="card__title">Join a Room</h2>
+        <p class="card__sub">Enter the code from your friend</p>
+
+        <div class="field">
+          <label class="field__label">Room code</label>
+          <input
+            class="field__input field__input--code"
+            type="text"
+            placeholder="YTZ-XXXX"
+            maxlength="8"
+            [ngModel]="joinCode()"
+            (ngModelChange)="joinCode.set($event.toUpperCase())" />
+        </div>
+
+        @if (errorMsg()) {
+          <p class="error-msg">{{ errorMsg() }}</p>
+        }
+
+        <div class="lobby__actions">
+          <button
+            class="btn btn--primary"
+            [class.btn--loading]="isLoading()"
+            [class.btn--disabled]="!joinCode().trim() || isLoading()"
+            [disabled]="!joinCode().trim() || isLoading()"
+            (click)="joinRoom()">
+            @if (isLoading()) { Connecting... } @else { Join Room }
+          </button>
+          <button class="btn btn--ghost" (click)="view.set('home')">Back</button>
+        </div>
+      </div>
+    }
+
+    <p class="lobby__footer">
+      All connections are end-to-end encrypted via WebRTC DTLS
+    </p>
+
+  </div>
+</div>

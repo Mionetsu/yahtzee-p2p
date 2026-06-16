@@ -1,0 +1,37 @@
+<div class="dice-tray">
+  @for (die of dice(); track die.id; let i = $index) {
+    <div
+      class="die-wrapper"
+      #wrapperRef
+      [class.die-wrapper--held]="die.held"
+      [class.die-wrapper--holdable]="canHold() && !isBlocked()"
+      [class.die-wrapper--blocked]="isBlocked()"
+      [class.die-wrapper--pre-roll]="rollsLeft() === 3"
+      (click)="onDieClick(die.id)">
+
+      @if (die.held) {
+        <span class="held-badge">HELD</span>
+      }
+
+      <div class="scene">
+        <div class="cube" #cubeRef>
+          <div class="cube__face cube__face--front">
+            @for (row of getDieFace(die.value); track $index) {
+              <div class="dot-row">
+                @for (dot of row; track $index) {
+                  <span class="dot">{{ dot }}</span>
+                }
+              </div>
+            }
+          </div>
+          <div class="cube__face cube__face--right"></div>
+          <div class="cube__face cube__face--top"></div>
+          <div class="cube__face cube__face--bottom"></div>
+          <div class="cube__face cube__face--left"></div>
+          <div class="cube__face cube__face--back"></div>
+        </div>
+      </div>
+
+    </div>
+  }
+</div>

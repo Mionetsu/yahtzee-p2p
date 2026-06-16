@@ -1,0 +1,40 @@
+@if (visible()) {
+  <div class="disconnected-overlay">
+    <div class="disconnected-card">
+
+      <div class="disconnected-icon">&#9889;</div>
+
+      <h2 class="disconnected-title">Connection Lost</h2>
+      <p class="disconnected-sub">
+        <strong>{{ playerName() }}</strong> has disconnected from the game
+      </p>
+
+      <div class="disconnected-timer">
+        <div class="timer-ring">
+          <svg viewBox="0 0 36 36">
+            <circle cx="18" cy="18" r="15.9"
+              fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="2"/>
+            <circle cx="18" cy="18" r="15.9"
+              fill="none" stroke="#5B4FE8" stroke-width="2"
+              stroke-dasharray="100"
+              [style.stroke-dashoffset]="100 - (timeLeft / waitSeconds() * 100)"
+              stroke-linecap="round"
+              transform="rotate(-90 18 18)"/>
+          </svg>
+          <span class="timer-number">{{ timeLeft }}</span>
+        </div>
+        <p class="timer-label">seconds to auto-end</p>
+      </div>
+
+      <div class="disconnected-actions">
+        <button class="btn-wait" (click)="onContinueWaiting()">
+          Wait longer (+60s)
+        </button>
+        <button class="btn-end" (click)="endGame.emit()">
+          End Game
+        </button>
+      </div>
+
+    </div>
+  </div>
+}
