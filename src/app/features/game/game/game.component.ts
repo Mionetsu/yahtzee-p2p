@@ -9,7 +9,6 @@ import { CategoryOverlayComponent } from '../components/category-overlay/categor
 import { OptionsMenuComponent, GameOptions } from '../components/options-menu/options-menu';
 import { PlayersHudComponent } from '../components/players-hud/players-hud';
 import { GameOverComponent } from '../components/game-over/game-over';
-import { Router } from '@angular/router';
 import { PlayerDisconnectedComponent } from '../components/player-disconnected/player-disconnected';
 
 @Component({
@@ -27,7 +26,6 @@ export class GameComponent implements OnInit, OnDestroy {
   private peer    = inject(PeerService);
   private diceRef = viewChild(DiceComponent);
   private audioCtx: AudioContext | null = null;
-  private router  = inject(Router);
   private pollIntervals: ReturnType<typeof setInterval>[] = [];
 
   showDisconnected   = signal<boolean>(false);
@@ -246,20 +244,35 @@ export class GameComponent implements OnInit, OnDestroy {
         lastMessage = msg;
 
         if (msg.type === 'game-state') {
-          const incoming = msg.payload as GameState;
+          const incoming  = msg.payload as GameState;
           const prevRolls = this.state().rollsLeft;
+          const prevTurn  = this.state().turn;
           const newRolls  = incoming.rollsLeft;
+          const newTurn   = incoming.turn;
 
-          // Animate dice for remote rolls (detect roll by rollsLeft decrease)
-          if (newRolls < prevRolls && !this.isMyTurn) {
+          // Detect a remote roll: rollsLeft decreased within the same turn
+          const wasRemoteRoll = newRolls < prevRolls && newTurn === prevTurn && !this.isMyTurn;
+
+          // Detect a turn change: turn number increased (scoring happened)
+          const wasTurnChange = newTurn > prevTurn;
+
+          // Reject stale states (older turn than what we already have)
+          if (incoming.turn >= this.state().turn) {
             this.yahtzee.applyRemoteState(incoming);
+          }
+
+          if (wasRemoteRoll) {
+            // Animate only the dice that were not held
             incoming.dice.forEach((die, i) => {
               if (!die.held) {
                 setTimeout(() => this.diceRef()?.animateRoll(i), i * 80);
               }
             });
-          } else {
-            this.yahtzee.applyRemoteState(incoming);
+          }
+
+          if (wasTurnChange) {
+            // Reset held-up wrappers visually when turn ends
+            this.diceRef()?.resetAllWrappers();
           }
         }
 
