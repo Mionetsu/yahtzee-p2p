@@ -1,4 +1,4 @@
-import { Component, input, output, ElementRef, viewChildren } from '@angular/core';
+import { Component, input, output, ElementRef, viewChildren, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { gsap } from 'gsap';
 import { Die } from '../../../../core/models';
@@ -10,34 +10,46 @@ import { Die } from '../../../../core/models';
   templateUrl: './dice.html',
   styleUrl: './dice.scss'
 })
-export class DiceComponent {
+export class DiceComponent implements OnChanges {
   dice       = input.required<Die[]>();
   canHold    = input<boolean>(false);
   dieToggled = output<number>();
+  isBlocked  = input<boolean>(false);
+  rollsLeft  = input<number>(3);
 
   private cubeEls    = viewChildren<ElementRef>('cubeRef');
   private wrapperEls = viewChildren<ElementRef>('wrapperRef');
 
+  private prevHeld: boolean[] = [];
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!changes['dice']) return;
+    const current = this.dice();
+    current.forEach((die, i) => {
+      const wasHeld = this.prevHeld[i] ?? false;
+      if (die.held !== wasHeld) {
+        const wrapper = this.wrapperEls()[i]?.nativeElement;
+        if (wrapper) {
+          gsap.to(wrapper, {
+            y: die.held ? -24 : 0,
+            duration: 0.25,
+            ease: 'back.out(2)'
+          });
+        }
+      }
+    });
+    this.prevHeld = current.map(d => d.held);
+  }
+
   onDieClick(dieId: number): void {
     if (!this.canHold() || this.isBlocked()) return;
     this.dieToggled.emit(dieId);
-
-    const wrapper = this.wrapperEls()[dieId]?.nativeElement;
-    if (!wrapper) return;
-
-    const die = this.dice()[dieId];
-    gsap.to(wrapper, {
-      y: !die.held ? -24 : 0,
-      duration: 0.25,
-      ease: 'back.out(2)'
-    });
   }
 
   animateRoll(dieIndex: number): void {
     const cube = this.cubeEls()[dieIndex]?.nativeElement;
     if (!cube) return;
 
-    // Quick shake animation — no rotation needed since front face always shows correct value
     gsap.timeline()
       .to(cube, { rotateZ: -15, duration: 0.08, ease: 'power1.out' })
       .to(cube, { rotateZ: 15,  duration: 0.08, ease: 'power1.inOut' })
@@ -66,8 +78,4 @@ export class DiceComponent {
     };
     return faces[value] ?? faces[1];
   }
-
-  isBlocked = input<boolean>(false);
-
-  rollsLeft = input<number>(3);
 }

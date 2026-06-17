@@ -20,11 +20,20 @@
   </header>
 
   <main class="game-main">
-    @if (currentPlayerObj) {
+    @if (scoreToast()) {
+      <div class="score-toast score-toast--visible">
+        ✅ {{ scoreToast() }}
+      </div>
+    }
+    @if (turnBanner()) {
+      <div class="turn-banner">{{ turnBanner() }}</div>
+    }
+
+    @if (myPlayerObj) {
       <aside class="game-sidebar">
         <app-scorecard
-          [currentPlayer]="currentPlayerObj"
-          [otherPlayers]="otherPlayers"
+          [currentPlayer]="myPlayerObj"
+          [otherPlayers]="otherPlayersExcludeMe"
           [previews]="previews"
           [isMyTurn]="isMyTurn"
           [rollsLeft]="rollsLeft()"
@@ -35,42 +44,42 @@
     }
 
     <section class="game-center">
-  <app-players-hud
-    [players]="state().players"
-    [currentPlayerId]="state().currentPlayer" />
+      <app-players-hud
+        [players]="state().players"
+        [currentPlayerId]="state().currentPlayer" />
 
-  <div class="dice-roll-area">
-    <app-dice
-      [dice]="dice()"
-      [canHold]="isMyTurn && rollsLeft() < 3"
-      [isBlocked]="isOverlayBlocking()"
-      [rollsLeft]="rollsLeft()"
-      (dieToggled)="toggleHold($event)" />
+      <div class="dice-roll-area">
+        <app-dice
+          [dice]="dice()"
+          [canHold]="isMyTurn && rollsLeft() < 3"
+          [isBlocked]="isOverlayBlocking()"
+          [rollsLeft]="rollsLeft()"
+          (dieToggled)="toggleHold($event)" />
 
-    <div class="roll-area">
-      <button
-        class="roll-btn"
-        [class.roll-btn--disabled]="!canRoll"
-        [disabled]="!canRoll"
-        (click)="rollDice()">
-        @if (rollsLeft() === 3) {
-          Roll Dice
-        } @else if (rollsLeft() > 0) {
-          Roll Again ({{ rollsLeft() }} left)
-        } @else {
-          No rolls left — pick a category
-        }
-      </button>
-      <div class="roll-pips">
-        @for (n of [1,2,3]; track n) {
-          <div class="pip" [class.pip--used]="n > rollsLeft()"></div>
-        }
+        <div class="roll-area">
+          <button
+            class="roll-btn"
+            [class.roll-btn--disabled]="!canRoll"
+            [disabled]="!canRoll"
+            (click)="rollDice()">
+            @if (rollsLeft() === 3) {
+              Roll Dice
+            } @else if (rollsLeft() > 0) {
+              Roll Again ({{ rollsLeft() }} left)
+            } @else {
+              No rolls left — pick a category
+            }
+          </button>
+          <div class="roll-pips">
+            @for (n of [1,2,3]; track n) {
+              <div class="pip" [class.pip--used]="n > rollsLeft()"></div>
+            }
+          </div>
+        </div>
       </div>
-    </div>
-  </div>
 
-  <div></div>
-</section>
+      <div></div>
+    </section>
   </main>
 
   <app-category-overlay
@@ -82,7 +91,7 @@
     [visible]="showGameOver()"
     (playAgain)="onPlayAgain()"
     (exitToLobby)="onExitToLobby()" />
-  
+
   <app-player-disconnected
     [playerName]="disconnectedPlayer()"
     [visible]="showDisconnected()"

@@ -5,7 +5,7 @@ import { GameState } from '../models';
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 export interface P2PMessage {
-  type: 'game-state' | 'player-joined' | 'player-left' | 'chat' | 'start-game';
+  type: 'game-state' | 'player-joined' | 'player-left' | 'chat' | 'start-game' | 'score-event';
   payload: unknown;
 }
 

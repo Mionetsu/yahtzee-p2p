@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy, inject, signal, viewChild } from '@angula
 import { CommonModule } from '@angular/common';
 import { YahtzeeService } from '../../../core/services/yahtzee.service';
 import { PeerService } from '../../../core/services/peer.service';
-import { ScoreCategory, Player } from '../../../core/models';
+import { ScoreCategory, Player, GameState } from '../../../core/models';
 import { DiceComponent } from '../components/dice/dice';
 import { ScorecardComponent } from '../components/scorecard/scorecard';
 import { CategoryOverlayComponent } from '../components/category-overlay/category-overlay';
@@ -27,8 +27,8 @@ export class GameComponent implements OnInit, OnDestroy {
   private router   = inject(Router);
   private pollIntervals: ReturnType<typeof setInterval>[] = [];
 
-  showDisconnected    = signal<boolean>(false);
-  disconnectedPlayer  = signal<string>('');
+  showDisconnected   = signal<boolean>(false);
+  disconnectedPlayer = signal<string>('');
 
   readonly state     = this.yahtzee.state;
   readonly dice      = this.yahtzee.dice;
@@ -42,17 +42,9 @@ export class GameComponent implements OnInit, OnDestroy {
     soundEnabled: true,
     textSize: 'normal',
   });
-  showGameOver = signal<boolean>(false);
-
-  updateOptions(changes: Partial<GameOptions>): void {
-    if (changes.exitGame) {
-      this.peer.disconnect();
-      this.audioCtx?.close();
-      window.location.href = '/';
-      return;
-    }
-    this.gameOptions.update(opts => ({ ...opts, ...changes }));
-  }
+  showGameOver  = signal<boolean>(false);
+  scoreToast    = signal<string | null>(null);
+  turnBanner    = signal<string | null>(null);
 
   get isMyTurn(): boolean {
     return this.state().currentPlayer === this.myPlayerId();
@@ -60,6 +52,14 @@ export class GameComponent implements OnInit, OnDestroy {
 
   get currentPlayerObj(): Player | undefined {
     return this.state().players.find((p: Player) => p.id === this.state().currentPlayer);
+  }
+
+  get myPlayerObj(): Player | undefined {
+    return this.state().players.find(p => p.id === this.myPlayerId());
+  }
+
+  get otherPlayersExcludeMe(): Player[] {
+    return this.state().players.filter(p => p.id !== this.myPlayerId());
   }
 
   get otherPlayers(): Player[] {
@@ -90,6 +90,16 @@ export class GameComponent implements OnInit, OnDestroy {
     );
   }
 
+  updateOptions(changes: Partial<GameOptions>): void {
+    if (changes.exitGame) {
+      this.peer.disconnect();
+      this.audioCtx?.close();
+      window.location.href = '/';
+      return;
+    }
+    this.gameOptions.update(opts => ({ ...opts, ...changes }));
+  }
+
   ngOnInit(): void {
     const myId = this.peer.myPeerId();
 
@@ -101,6 +111,7 @@ export class GameComponent implements OnInit, OnDestroy {
 
     this.watchPeerMessages();
     this.watchDisconnections();
+    this.watchTurnChange();
 
     let bonusAlreadyShown = false;
     const bonusInterval = setInterval(() => {
@@ -151,21 +162,70 @@ export class GameComponent implements OnInit, OnDestroy {
 
   scoreCategory(category: ScoreCategory): void {
     if (!this.isMyTurn || this.isOverlayBlocking()) return;
+
+    const playerName = this.myPlayerObj?.name ?? 'Player';
+
     this.yahtzee.scoreCategory(this.myPlayerId(), category);
-    this.peer.broadcastState(this.state(), this.myPlayerId());
+
+    const finalState = this.yahtzee.state();
+    const isFinished = finalState.phase === 'finished';
+
+    this.peer.broadcastState(finalState, this.myPlayerId());
+
+    this.peer.broadcastMessage({
+      type: 'score-event' as any,
+      payload: { category, playerName }
+    });
+
     this.diceRef()?.resetAllWrappers();
-    setTimeout(() => {
-      if (this.state().phase === 'finished') {
-        this.peer.clearReconnectData();
+    this.showScoreToast(category, playerName);
+    this.playScoreSound(category);
+
+    if (isFinished) {
+      this.peer.clearReconnectData();
+      this.peer.broadcastMessage({
+        type: 'game-over' as any,
+        payload: finalState
+      });
+      setTimeout(() => {
         this.showGameOver.set(true);
         this.playGameOverSound();
-      }
-    }, 300);
+      }, 400);
+    }
   }
 
   onOverlayDismissed(): void {
     this.activeOverlay.set(null);
     setTimeout(() => this.isOverlayBlocking.set(false), 1000);
+  }
+
+  onContinueWaiting(): void {}
+
+  onEndGameAfterDisconnect(): void {
+    this.showDisconnected.set(false);
+    this.showGameOver.set(true);
+    this.playGameOverSound();
+  }
+
+  onPlayAgain(): void {
+    const currentPlayers = this.state().players;
+    const resetPlayers = currentPlayers.map(p =>
+      this.yahtzee.createPlayer(p.id, p.name, p.isHost, p.avatarColor, p.avatarImage)
+    );
+    this.yahtzee.startGame(resetPlayers, this.state().roomCode);
+    this.showGameOver.set(false);
+
+    this.peer.broadcastMessage({
+      type: 'play-again' as any,
+      payload: this.yahtzee.state()
+    });
+  }
+
+  onExitToLobby(): void {
+    this.showGameOver.set(false);
+    this.peer.clearReconnectData();
+    this.peer.disconnect();
+    window.location.href = '/';
   }
 
   private watchPeerMessages(): void {
@@ -174,8 +234,44 @@ export class GameComponent implements OnInit, OnDestroy {
       const msg = this.peer.lastMessage();
       if (msg && msg !== lastMessage) {
         lastMessage = msg;
+
         if (msg.type === 'game-state') {
-          this.yahtzee.applyRemoteState(msg.payload as any);
+          const incoming = msg.payload as GameState;
+          const prevRolls = this.state().rollsLeft;
+          const newRolls  = incoming.rollsLeft;
+
+          if (newRolls < prevRolls && !this.isMyTurn) {
+            this.yahtzee.applyRemoteState(incoming);
+            incoming.dice.forEach((die, i) => {
+              if (!die.held) {
+                setTimeout(() => this.diceRef()?.animateRoll(i), i * 80);
+              }
+            });
+          } else {
+            this.yahtzee.applyRemoteState(incoming);
+          }
+        }
+
+        if ((msg.type as string) === 'score-event') {
+          const { category, playerName } = msg.payload as any;
+          this.showScoreToast(category, playerName);
+          if (this.gameOptions().soundEnabled) {
+            this.playScoreSound(category);
+          }
+        }
+
+        if ((msg.type as string) === 'game-over') {
+          this.yahtzee.applyRemoteState(msg.payload as GameState);
+          setTimeout(() => {
+            this.showGameOver.set(true);
+            this.playGameOverSound();
+          }, 400);
+        }
+
+        if ((msg.type as string) === 'play-again') {
+          const newState = msg.payload as GameState;
+          this.yahtzee.applyRemoteState(newState);
+          this.showGameOver.set(false);
         }
       }
     }, 100);
@@ -199,12 +295,19 @@ export class GameComponent implements OnInit, OnDestroy {
     this.pollIntervals.push(interval);
   }
 
-  onContinueWaiting(): void {}
-
-  onEndGameAfterDisconnect(): void {
-    this.showDisconnected.set(false);
-    this.showGameOver.set(true);
-    this.playGameOverSound();
+  private watchTurnChange(): void {
+    let lastPlayer = this.state().currentPlayer;
+    const interval = setInterval(() => {
+      const current = this.state().currentPlayer;
+      if (current !== lastPlayer) {
+        lastPlayer = current;
+        const player = this.state().players.find(p => p.id === current);
+        const label = current === this.myPlayerId() ? 'Your Turn!' : `${player?.name}'s Turn`;
+        this.turnBanner.set(label);
+        setTimeout(() => this.turnBanner.set(null), 2200);
+      }
+    }, 200);
+    this.pollIntervals.push(interval);
   }
 
   private startDemoGame(): void {
@@ -219,6 +322,18 @@ export class GameComponent implements OnInit, OnDestroy {
       this.activeOverlay.set('bonus' as ScoreCategory);
       this.playBonusSound();
     }, 400);
+  }
+
+  private showScoreToast(category: ScoreCategory, playerName: string): void {
+    const labels: Partial<Record<ScoreCategory, string>> = {
+      ones: 'Aces', twos: 'Deuces', threes: 'Threes',
+      fours: 'Fours', fives: 'Fives', sixes: 'Sixes',
+      threeOfAKind: '3 of a Kind', fourOfAKind: '4 of a Kind',
+      fullHouse: 'Full House', smallStraight: 'S. Straight',
+      largeStraight: 'L. Straight', yahtzee: 'Yahtzee!', chance: 'Chance',
+    };
+    this.scoreToast.set(`${playerName}: ${labels[category] ?? category}`);
+    setTimeout(() => this.scoreToast.set(null), 2500);
   }
 
   private checkForAchievedCategory(): void {
@@ -239,6 +354,20 @@ export class GameComponent implements OnInit, OnDestroy {
         return;
       }
     }
+  }
+
+  private playScoreSound(category: ScoreCategory): void {
+    if (!this.gameOptions().soundEnabled) return;
+    const ctx  = this.getAudioCtx();
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type   = 'sine';
+    osc.frequency.value = category === 'yahtzee' ? 880 : 660;
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.3);
   }
 
   private playRollSound(): void {
@@ -286,9 +415,9 @@ export class GameComponent implements OnInit, OnDestroy {
     if (category === 'yahtzee') {
       [523, 784, 1047, 1319, 1047, 784, 1047, 1319].forEach((freq, i) => {
         setTimeout(() => {
-          const osc    = ctx.createOscillator();
-          const gain   = ctx.createGain();
-          osc.type     = 'sine';
+          const osc  = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type   = 'sine';
           osc.frequency.value = freq;
           gain.gain.setValueAtTime(0.3, ctx.currentTime);
           gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
@@ -351,27 +480,9 @@ export class GameComponent implements OnInit, OnDestroy {
     });
   }
 
-  private getAudioCtx(): AudioContext {
-    if (!this.audioCtx) this.audioCtx = new AudioContext();
-    return this.audioCtx;
-  }
-
-  onPlayAgain(): void {
-    this.showGameOver.set(false);
-    const me = this.yahtzee.createPlayer(this.myPlayerId(), 'You', true);
-    this.yahtzee.startGame([me], this.state().roomCode);
-  }
-
-  onExitToLobby(): void {
-    this.showGameOver.set(false);
-    this.peer.clearReconnectData();
-    this.peer.disconnect();
-    window.location.href = '/';
-  }
-
   private playGameOverSound(): void {
-    const ctx = this.getAudioCtx();
     if (!this.gameOptions().soundEnabled) return;
+    const ctx = this.getAudioCtx();
     const melody = [523, 659, 784, 1047, 784, 1047, 1319];
     melody.forEach((freq, i) => {
       setTimeout(() => {
@@ -386,5 +497,10 @@ export class GameComponent implements OnInit, OnDestroy {
         osc.stop(ctx.currentTime + 0.5);
       }, i * 150);
     });
+  }
+
+  private getAudioCtx(): AudioContext {
+    if (!this.audioCtx) this.audioCtx = new AudioContext();
+    return this.audioCtx;
   }
 }
