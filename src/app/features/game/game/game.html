@@ -20,13 +20,12 @@
   </header>
 
   <main class="game-main">
-    @if (scoreToast()) {
-      <div class="score-toast score-toast--visible">
-        ✅ {{ scoreToast() }}
-      </div>
-    }
     @if (turnBanner()) {
       <div class="turn-banner">{{ turnBanner() }}</div>
+    }
+
+    @if (scoreToast()) {
+      <div class="score-toast">{{ scoreToast() }}</div>
     }
 
     @if (myPlayerObj) {

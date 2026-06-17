@@ -60,23 +60,50 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: rgba(91, 79, 232, 0.92);
+  background: rgba(91, 79, 232, 0.95);
   color: #fff;
   font-size: 28px;
   font-weight: 800;
   padding: 20px 48px;
   border-radius: 20px;
   z-index: 500;
-  animation: turnPop 2.2s ease forwards;
   pointer-events: none;
   letter-spacing: -.01em;
   box-shadow: 0 0 60px rgba(91,79,232,0.6);
+  animation: turnPop 2.2s ease forwards;
+  white-space: nowrap;
 }
 
 @keyframes turnPop {
   0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.7); }
-  15%  { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
-  25%  { transform: translate(-50%, -50%) scale(1); }
+  12%  { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
+  22%  { transform: translate(-50%, -50%) scale(1); }
   75%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   100% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+}
+
+.score-toast {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(30, 30, 50, 0.92);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 12px 24px;
+  border-radius: 50px;
+  z-index: 400;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+  animation: toastSlide 2.5s ease forwards;
+  white-space: nowrap;
+}
+
+@keyframes toastSlide {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(12px); }
+  12%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+  75%  { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
 }

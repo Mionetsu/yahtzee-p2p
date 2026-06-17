@@ -168,8 +168,9 @@ export class GameComponent implements OnInit, OnDestroy {
 
     const playerName = this.myPlayerObj?.name ?? 'Player';
 
-    this.isOverlayBlocking.set(false);
+    // Limpiar estado antes de anotar
     this.activeOverlay.set(null);
+    this.isOverlayBlocking.set(false);
 
     this.yahtzee.scoreCategory(this.myPlayerId(), category);
 
@@ -307,7 +308,7 @@ export class GameComponent implements OnInit, OnDestroy {
       const current = this.state().currentPlayer;
       if (current !== lastPlayer) {
         lastPlayer = current;
-        this.isOverlayBlocking.set(false);
+        // Solo limpiar overlay, NUNCA tocar isOverlayBlocking aquí
         this.activeOverlay.set(null);
         const player = this.state().players.find(p => p.id === current);
         const label = current === this.myPlayerId() ? 'Your Turn!' : `${player?.name}'s Turn`;
@@ -357,6 +358,7 @@ export class GameComponent implements OnInit, OnDestroy {
       const score = this.yahtzee.previewScore(cat);
       if (score !== null && score > 0) {
         setTimeout(() => {
+          // Doble check: si ya no es mi turno, no bloquear
           if (!this.isMyTurn) return;
           this.isOverlayBlocking.set(true);
           this.activeOverlay.set(cat);
