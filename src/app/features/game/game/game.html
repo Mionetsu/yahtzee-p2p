@@ -20,14 +20,6 @@
   </header>
 
   <main class="game-main">
-    @if (turnBanner()) {
-      <div class="turn-banner">{{ turnBanner() }}</div>
-    }
-
-    @if (scoreToast()) {
-      <div class="score-toast">{{ scoreToast() }}</div>
-    }
-
     @if (myPlayerObj) {
       <aside class="game-sidebar">
         <app-scorecard
@@ -81,21 +73,34 @@
     </section>
   </main>
 
+  <!-- Category achievement overlay (yahtzee, full house, etc.) -->
   <app-category-overlay
     [category]="activeOverlay()"
     (dismissed)="onOverlayDismissed()" />
 
+  <!-- Game over screen -->
   <app-game-over
     [players]="state().players"
     [visible]="showGameOver()"
     (playAgain)="onPlayAgain()"
     (exitToLobby)="onExitToLobby()" />
 
+  <!-- Disconnection handler -->
   <app-player-disconnected
     [playerName]="disconnectedPlayer()"
     [visible]="showDisconnected()"
     [waitSeconds]="60"
     (continueWaiting)="onContinueWaiting()"
     (endGame)="onEndGameAfterDisconnect()" />
+
+  <!-- Turn change banner -->
+  @if (turnBanner()) {
+    <div class="turn-banner">{{ turnBanner() }}</div>
+  }
+
+  <!-- Score toast (bottom) -->
+  @if (scoreToast()) {
+    <div class="score-toast">{{ scoreToast() }}</div>
+  }
 
 </div>

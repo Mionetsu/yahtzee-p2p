@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject, signal, viewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal, viewChild, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { YahtzeeService } from '../../../core/services/yahtzee.service';
 import { PeerService } from '../../../core/services/peer.service';
@@ -15,16 +15,19 @@ import { PlayerDisconnectedComponent } from '../components/player-disconnected/p
 @Component({
   selector: 'app-game',
   standalone: true,
-  imports: [CommonModule, DiceComponent, ScorecardComponent, CategoryOverlayComponent, OptionsMenuComponent, PlayersHudComponent, GameOverComponent, PlayerDisconnectedComponent],
+  imports: [
+    CommonModule, DiceComponent, ScorecardComponent, CategoryOverlayComponent,
+    OptionsMenuComponent, PlayersHudComponent, GameOverComponent, PlayerDisconnectedComponent
+  ],
   templateUrl: './game.html',
   styleUrl: './game.scss'
 })
 export class GameComponent implements OnInit, OnDestroy {
-  private yahtzee  = inject(YahtzeeService);
-  private peer     = inject(PeerService);
-  private diceRef  = viewChild(DiceComponent);
+  private yahtzee = inject(YahtzeeService);
+  private peer    = inject(PeerService);
+  private diceRef = viewChild(DiceComponent);
   private audioCtx: AudioContext | null = null;
-  private router   = inject(Router);
+  private router  = inject(Router);
   private pollIntervals: ReturnType<typeof setInterval>[] = [];
 
   showDisconnected   = signal<boolean>(false);
@@ -34,24 +37,29 @@ export class GameComponent implements OnInit, OnDestroy {
   readonly dice      = this.yahtzee.dice;
   readonly rollsLeft = this.yahtzee.rollsLeft;
 
-  activeOverlay     = signal<ScoreCategory | null>(null);
-  myPlayerId        = signal<string>('');
-  isOverlayBlocking = signal<boolean>(false);
-  gameOptions       = signal<GameOptions>({
+  myPlayerId    = signal<string>('');
+  activeOverlay = signal<ScoreCategory | null>(null);
+  showGameOver  = signal<boolean>(false);
+  scoreToast    = signal<string | null>(null);
+  turnBanner    = signal<string | null>(null);
+
+  // isOverlayBlocking is now DERIVED from activeOverlay — can never desync
+  readonly isOverlayBlocking = computed(() => this.activeOverlay() !== null);
+
+  gameOptions = signal<GameOptions>({
     scorecardView: 'modern',
     soundEnabled: true,
     textSize: 'normal',
   });
-  showGameOver  = signal<boolean>(false);
-  scoreToast    = signal<string | null>(null);
-  turnBanner    = signal<string | null>(null);
+
+  // ── Getters ────────────────────────────────────────────────────────────────
 
   get isMyTurn(): boolean {
     return this.state().currentPlayer === this.myPlayerId();
   }
 
   get currentPlayerObj(): Player | undefined {
-    return this.state().players.find((p: Player) => p.id === this.state().currentPlayer);
+    return this.state().players.find(p => p.id === this.state().currentPlayer);
   }
 
   get myPlayerObj(): Player | undefined {
@@ -60,18 +68,6 @@ export class GameComponent implements OnInit, OnDestroy {
 
   get otherPlayersExcludeMe(): Player[] {
     return this.state().players.filter(p => p.id !== this.myPlayerId());
-  }
-
-  get otherPlayers(): Player[] {
-    return this.state().players.filter((p: Player) => p.id !== this.state().currentPlayer);
-  }
-
-  get allPlayers(): Player[] {
-    return this.state().players;
-  }
-
-  getPlayerTotal(player: Player): number {
-    return this.yahtzee.grandTotal(player.scoreCard);
   }
 
   get canRoll(): boolean {
@@ -90,6 +86,8 @@ export class GameComponent implements OnInit, OnDestroy {
     );
   }
 
+  // ── Options ────────────────────────────────────────────────────────────────
+
   updateOptions(changes: Partial<GameOptions>): void {
     if (changes.exitGame) {
       this.peer.disconnect();
@@ -99,6 +97,8 @@ export class GameComponent implements OnInit, OnDestroy {
     }
     this.gameOptions.update(opts => ({ ...opts, ...changes }));
   }
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   ngOnInit(): void {
     const myId = this.peer.myPeerId();
@@ -113,13 +113,14 @@ export class GameComponent implements OnInit, OnDestroy {
     this.watchDisconnections();
     this.watchTurnChange();
 
+    // Bonus overlay — only for local player
     let bonusAlreadyShown = false;
     const bonusInterval = setInterval(() => {
       if (!this.isMyTurn) return;
       const player = this.state().players.find(p => p.id === this.myPlayerId());
       if (!player) return;
-      const upper = ['ones','twos','threes','fours','fives','sixes']
-        .reduce((sum, cat) => sum + (player.scoreCard[cat as ScoreCategory] ?? 0), 0);
+      const upper = (['ones','twos','threes','fours','fives','sixes'] as ScoreCategory[])
+        .reduce((sum, cat) => sum + (player.scoreCard[cat] ?? 0), 0);
       if (upper >= 63 && !bonusAlreadyShown && !this.isOverlayBlocking()) {
         bonusAlreadyShown = true;
         this.showBonusAnimation();
@@ -133,6 +134,8 @@ export class GameComponent implements OnInit, OnDestroy {
     this.peer.disconnect();
     this.audioCtx?.close();
   }
+
+  // ── Actions ────────────────────────────────────────────────────────────────
 
   rollDice(): void {
     if (!this.canRoll) return;
@@ -151,9 +154,7 @@ export class GameComponent implements OnInit, OnDestroy {
     setTimeout(() => {
       this.yahtzee.rollDice();
       this.peer.broadcastState(this.state(), this.myPlayerId());
-      if (this.isMyTurn) {
-        this.checkForAchievedCategory();
-      }
+      this.checkForAchievedCategory();
     }, 100);
   }
 
@@ -164,13 +165,13 @@ export class GameComponent implements OnInit, OnDestroy {
   }
 
   scoreCategory(category: ScoreCategory): void {
-    if (!this.isMyTurn || this.isOverlayBlocking()) return;
+    if (!this.isMyTurn) return;
+    // If overlay is blocking, only allow scoring after dismissing — but
+    // since overlay auto-dismisses, user clicking scorecard means it's already gone.
+    // We clear just in case any stale overlay signal remains.
+    this.activeOverlay.set(null);
 
     const playerName = this.myPlayerObj?.name ?? 'Player';
-
-    // Limpiar estado antes de anotar
-    this.activeOverlay.set(null);
-    this.isOverlayBlocking.set(false);
 
     this.yahtzee.scoreCategory(this.myPlayerId(), category);
 
@@ -201,9 +202,9 @@ export class GameComponent implements OnInit, OnDestroy {
     }
   }
 
+  // Called by category-overlay (dismissed) output
   onOverlayDismissed(): void {
     this.activeOverlay.set(null);
-    this.isOverlayBlocking.set(false);
   }
 
   onContinueWaiting(): void {}
@@ -235,6 +236,8 @@ export class GameComponent implements OnInit, OnDestroy {
     window.location.href = '/';
   }
 
+  // ── P2P watchers ───────────────────────────────────────────────────────────
+
   private watchPeerMessages(): void {
     let lastMessage = this.peer.lastMessage();
     const interval = setInterval(() => {
@@ -247,6 +250,7 @@ export class GameComponent implements OnInit, OnDestroy {
           const prevRolls = this.state().rollsLeft;
           const newRolls  = incoming.rollsLeft;
 
+          // Animate dice for remote rolls (detect roll by rollsLeft decrease)
           if (newRolls < prevRolls && !this.isMyTurn) {
             this.yahtzee.applyRemoteState(incoming);
             incoming.dice.forEach((die, i) => {
@@ -276,8 +280,7 @@ export class GameComponent implements OnInit, OnDestroy {
         }
 
         if ((msg.type as string) === 'play-again') {
-          const newState = msg.payload as GameState;
-          this.yahtzee.applyRemoteState(newState);
+          this.yahtzee.applyRemoteState(msg.payload as GameState);
           this.showGameOver.set(false);
         }
       }
@@ -308,7 +311,7 @@ export class GameComponent implements OnInit, OnDestroy {
       const current = this.state().currentPlayer;
       if (current !== lastPlayer) {
         lastPlayer = current;
-        // Solo limpiar overlay, NUNCA tocar isOverlayBlocking aquí
+        // Clear any stale overlay when the turn changes
         this.activeOverlay.set(null);
         const player = this.state().players.find(p => p.id === current);
         const label = current === this.myPlayerId() ? 'Your Turn!' : `${player?.name}'s Turn`;
@@ -319,6 +322,8 @@ export class GameComponent implements OnInit, OnDestroy {
     this.pollIntervals.push(interval);
   }
 
+  // ── Private helpers ────────────────────────────────────────────────────────
+
   private startDemoGame(): void {
     const me = this.yahtzee.createPlayer('player-1', 'You', true);
     this.myPlayerId.set('player-1');
@@ -328,22 +333,9 @@ export class GameComponent implements OnInit, OnDestroy {
   private showBonusAnimation(): void {
     setTimeout(() => {
       if (!this.isMyTurn) return;
-      this.isOverlayBlocking.set(true);
       this.activeOverlay.set('bonus' as ScoreCategory);
       this.playBonusSound();
     }, 400);
-  }
-
-  private showScoreToast(category: ScoreCategory, playerName: string): void {
-    const labels: Partial<Record<ScoreCategory, string>> = {
-      ones: 'Aces', twos: 'Deuces', threes: 'Threes',
-      fours: 'Fours', fives: 'Fives', sixes: 'Sixes',
-      threeOfAKind: '3 of a Kind', fourOfAKind: '4 of a Kind',
-      fullHouse: 'Full House', smallStraight: 'S. Straight',
-      largeStraight: 'L. Straight', yahtzee: 'Yahtzee!', chance: 'Chance',
-    };
-    this.scoreToast.set(`${playerName}: ${labels[category] ?? category}`);
-    setTimeout(() => this.scoreToast.set(null), 2500);
   }
 
   private checkForAchievedCategory(): void {
@@ -358,9 +350,8 @@ export class GameComponent implements OnInit, OnDestroy {
       const score = this.yahtzee.previewScore(cat);
       if (score !== null && score > 0) {
         setTimeout(() => {
-          // Doble check: si ya no es mi turno, no bloquear
-          if (!this.isMyTurn) return;
-          this.isOverlayBlocking.set(true);
+          // Guard: only show if still my turn and no other overlay is active
+          if (!this.isMyTurn || this.activeOverlay() !== null) return;
           this.activeOverlay.set(cat);
           this.playAchievementSound(cat);
         }, 750);
@@ -369,18 +360,37 @@ export class GameComponent implements OnInit, OnDestroy {
     }
   }
 
+  private showScoreToast(category: ScoreCategory, playerName: string): void {
+    const labels: Partial<Record<ScoreCategory, string>> = {
+      ones: 'Aces', twos: 'Deuces', threes: 'Threes',
+      fours: 'Fours', fives: 'Fives', sixes: 'Sixes',
+      threeOfAKind: '3 of a Kind', fourOfAKind: '4 of a Kind',
+      fullHouse: 'Full House', smallStraight: 'S. Straight',
+      largeStraight: 'L. Straight', yahtzee: 'Yahtzee!', chance: 'Chance',
+    };
+    this.scoreToast.set(`${playerName}: ${labels[category] ?? category}`);
+    setTimeout(() => this.scoreToast.set(null), 2500);
+  }
+
+  // ── Audio ──────────────────────────────────────────────────────────────────
+
   private playScoreSound(category: ScoreCategory): void {
     if (!this.gameOptions().soundEnabled) return;
     const ctx  = this.getAudioCtx();
-    const osc  = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type   = 'sine';
-    osc.frequency.value = category === 'yahtzee' ? 880 : 660;
-    gain.gain.setValueAtTime(0.2, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.3);
+    const notes = category === 'yahtzee' ? [523, 659, 784, 1047] : [523, 659];
+    notes.forEach((freq, i) => {
+      setTimeout(() => {
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type   = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.3);
+      }, i * 100);
+    });
   }
 
   private playRollSound(): void {
