@@ -115,6 +115,7 @@ export class GameComponent implements OnInit, OnDestroy {
 
     let bonusAlreadyShown = false;
     const bonusInterval = setInterval(() => {
+      if (!this.isMyTurn) return;
       const player = this.state().players.find(p => p.id === this.myPlayerId());
       if (!player) return;
       const upper = ['ones','twos','threes','fours','fives','sixes']
@@ -150,7 +151,9 @@ export class GameComponent implements OnInit, OnDestroy {
     setTimeout(() => {
       this.yahtzee.rollDice();
       this.peer.broadcastState(this.state(), this.myPlayerId());
-      this.checkForAchievedCategory();
+      if (this.isMyTurn) {
+        this.checkForAchievedCategory();
+      }
     }, 100);
   }
 
@@ -164,6 +167,9 @@ export class GameComponent implements OnInit, OnDestroy {
     if (!this.isMyTurn || this.isOverlayBlocking()) return;
 
     const playerName = this.myPlayerObj?.name ?? 'Player';
+
+    this.isOverlayBlocking.set(false);
+    this.activeOverlay.set(null);
 
     this.yahtzee.scoreCategory(this.myPlayerId(), category);
 
@@ -196,7 +202,7 @@ export class GameComponent implements OnInit, OnDestroy {
 
   onOverlayDismissed(): void {
     this.activeOverlay.set(null);
-    setTimeout(() => this.isOverlayBlocking.set(false), 1000);
+    this.isOverlayBlocking.set(false);
   }
 
   onContinueWaiting(): void {}
@@ -301,6 +307,8 @@ export class GameComponent implements OnInit, OnDestroy {
       const current = this.state().currentPlayer;
       if (current !== lastPlayer) {
         lastPlayer = current;
+        this.isOverlayBlocking.set(false);
+        this.activeOverlay.set(null);
         const player = this.state().players.find(p => p.id === current);
         const label = current === this.myPlayerId() ? 'Your Turn!' : `${player?.name}'s Turn`;
         this.turnBanner.set(label);
@@ -318,6 +326,7 @@ export class GameComponent implements OnInit, OnDestroy {
 
   private showBonusAnimation(): void {
     setTimeout(() => {
+      if (!this.isMyTurn) return;
       this.isOverlayBlocking.set(true);
       this.activeOverlay.set('bonus' as ScoreCategory);
       this.playBonusSound();
@@ -337,6 +346,7 @@ export class GameComponent implements OnInit, OnDestroy {
   }
 
   private checkForAchievedCategory(): void {
+    if (!this.isMyTurn) return;
     const specialCategories: ScoreCategory[] = [
       'yahtzee', 'largeStraight', 'smallStraight',
       'fullHouse', 'fourOfAKind', 'threeOfAKind'
@@ -347,6 +357,7 @@ export class GameComponent implements OnInit, OnDestroy {
       const score = this.yahtzee.previewScore(cat);
       if (score !== null && score > 0) {
         setTimeout(() => {
+          if (!this.isMyTurn) return;
           this.isOverlayBlocking.set(true);
           this.activeOverlay.set(cat);
           this.playAchievementSound(cat);
