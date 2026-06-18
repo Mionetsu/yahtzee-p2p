@@ -10,8 +10,8 @@
       <span class="turn-label">Turn {{ state().turn }}</span>
     </div>
     <div class="game-header__right">
-      <div class="game-header__phase" [class.phase--my-turn]="isMyTurn">
-        {{ isMyTurn ? 'Your turn' : (currentPlayerObj?.name + "'s turn") }}
+      <div class="game-header__phase" [class.phase--my-turn]="isMyTurn()">
+        {{ isMyTurn() ? 'Your turn' : (currentPlayerObj()?.name + "'s turn") }}
       </div>
       <app-options-menu
         [options]="gameOptions()"
@@ -20,13 +20,13 @@
   </header>
 
   <main class="game-main">
-    @if (myPlayerObj) {
+    @if (myPlayerObj()) {
       <aside class="game-sidebar">
         <app-scorecard
-          [currentPlayer]="myPlayerObj"
-          [otherPlayers]="otherPlayersExcludeMe"
-          [previews]="previews"
-          [isMyTurn]="isMyTurn"
+          [currentPlayer]="myPlayerObj()!"
+          [otherPlayers]="otherPlayersExcludeMe()"
+          [previews]="previews()"
+          [isMyTurn]="isMyTurn()"
           [rollsLeft]="rollsLeft()"
           [textSize]="gameOptions().textSize"
           [viewMode]="gameOptions().scorecardView"
@@ -42,7 +42,7 @@
       <div class="dice-roll-area">
         <app-dice
           [dice]="dice()"
-          [canHold]="isMyTurn && rollsLeft() < 3"
+          [canHold]="isMyTurn() && rollsLeft() < 3"
           [isBlocked]="isOverlayBlocking()"
           [rollsLeft]="rollsLeft()"
           (dieToggled)="toggleHold($event)" />
@@ -50,8 +50,8 @@
         <div class="roll-area">
           <button
             class="roll-btn"
-            [class.roll-btn--disabled]="!canRoll"
-            [disabled]="!canRoll"
+            [class.roll-btn--disabled]="!canRoll()"
+            [disabled]="!canRoll()"
             (click)="rollDice()">
             @if (rollsLeft() === 3) {
               Roll Dice

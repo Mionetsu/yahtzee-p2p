@@ -41,7 +41,6 @@ export class GameComponent implements OnInit, OnDestroy {
   scoreToast    = signal<string | null>(null);
   turnBanner    = signal<string | null>(null);
 
-  // isOverlayBlocking is now DERIVED from activeOverlay — can never desync
   readonly isOverlayBlocking = computed(() => this.activeOverlay() !== null);
 
   gameOptions = signal<GameOptions>({
@@ -50,30 +49,30 @@ export class GameComponent implements OnInit, OnDestroy {
     textSize: 'normal',
   });
 
-  // ── Getters ────────────────────────────────────────────────────────────────
+  // ── Computed signals ───────────────────────────────────────────────────────
 
-  get isMyTurn(): boolean {
-    return this.state().currentPlayer === this.myPlayerId();
-  }
+  readonly isMyTurn = computed(() =>
+    this.state().currentPlayer === this.myPlayerId()
+  );
 
-  get currentPlayerObj(): Player | undefined {
-    return this.state().players.find(p => p.id === this.state().currentPlayer);
-  }
+  readonly currentPlayerObj = computed(() =>
+    this.state().players.find(p => p.id === this.state().currentPlayer)
+  );
 
-  get myPlayerObj(): Player | undefined {
-    return this.state().players.find(p => p.id === this.myPlayerId());
-  }
+  readonly myPlayerObj = computed(() =>
+    this.state().players.find(p => p.id === this.myPlayerId())
+  );
 
-  get otherPlayersExcludeMe(): Player[] {
-    return this.state().players.filter(p => p.id !== this.myPlayerId());
-  }
+  readonly otherPlayersExcludeMe = computed(() =>
+    this.state().players.filter(p => p.id !== this.myPlayerId())
+  );
 
-  get canRoll(): boolean {
-    return this.isMyTurn && this.rollsLeft() > 0 && !this.isOverlayBlocking();
-  }
+  readonly canRoll = computed(() =>
+    this.isMyTurn() && this.rollsLeft() > 0 && !this.isOverlayBlocking()
+  );
 
-  get previews(): Partial<Record<ScoreCategory, number | null>> {
-    if (!this.isMyTurn || this.rollsLeft() === 3) return {};
+  readonly previews = computed((): Partial<Record<ScoreCategory, number | null>> => {
+    if (!this.isMyTurn() || this.rollsLeft() === 3) return {};
     const categories: ScoreCategory[] = [
       'ones','twos','threes','fours','fives','sixes',
       'threeOfAKind','fourOfAKind','fullHouse',
@@ -82,7 +81,7 @@ export class GameComponent implements OnInit, OnDestroy {
     return Object.fromEntries(
       categories.map(cat => [cat, this.yahtzee.previewScore(cat)])
     );
-  }
+  });
 
   // ── Options ────────────────────────────────────────────────────────────────
 
@@ -99,22 +98,15 @@ export class GameComponent implements OnInit, OnDestroy {
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   ngOnInit(): void {
-    const myId = this.peer.myPeerId();
-
-    if (this.state().phase === 'lobby' || !myId) {
-      this.startDemoGame();
-    } else {
-      this.myPlayerId.set(myId);
-    }
+    this.initMyPlayer();
 
     this.watchPeerMessages();
     this.watchDisconnections();
     this.watchTurnChange();
 
-    // Bonus overlay — only for local player
     let bonusAlreadyShown = false;
     const bonusInterval = setInterval(() => {
-      if (!this.isMyTurn) return;
+      if (!this.isMyTurn()) return;
       const player = this.state().players.find(p => p.id === this.myPlayerId());
       if (!player) return;
       const upper = (['ones','twos','threes','fours','fives','sixes'] as ScoreCategory[])
@@ -136,7 +128,7 @@ export class GameComponent implements OnInit, OnDestroy {
   // ── Actions ────────────────────────────────────────────────────────────────
 
   rollDice(): void {
-    if (!this.canRoll) return;
+    if (!this.canRoll()) return;
     const isLastRoll = this.rollsLeft() === 1;
 
     if (this.gameOptions().soundEnabled) {
@@ -157,19 +149,16 @@ export class GameComponent implements OnInit, OnDestroy {
   }
 
   toggleHold(dieId: number): void {
-    if (!this.isMyTurn || this.rollsLeft() === 3 || this.isOverlayBlocking()) return;
+    if (!this.isMyTurn() || this.rollsLeft() === 3 || this.isOverlayBlocking()) return;
     this.yahtzee.toggleHold(dieId);
     this.peer.broadcastState(this.state(), this.myPlayerId());
   }
 
   scoreCategory(category: ScoreCategory): void {
-    if (!this.isMyTurn) return;
-    // If overlay is blocking, only allow scoring after dismissing — but
-    // since overlay auto-dismisses, user clicking scorecard means it's already gone.
-    // We clear just in case any stale overlay signal remains.
+    if (!this.isMyTurn()) return;
     this.activeOverlay.set(null);
 
-    const playerName = this.myPlayerObj?.name ?? 'Player';
+    const playerName = this.myPlayerObj()?.name ?? 'Player';
 
     this.yahtzee.scoreCategory(this.myPlayerId(), category);
 
@@ -200,7 +189,6 @@ export class GameComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Called by category-overlay (dismissed) output
   onOverlayDismissed(): void {
     this.activeOverlay.set(null);
   }
@@ -237,85 +225,82 @@ export class GameComponent implements OnInit, OnDestroy {
   // ── P2P watchers ───────────────────────────────────────────────────────────
 
   private watchPeerMessages(): void {
-    let lastMessage = this.peer.lastMessage();
     const interval = setInterval(() => {
-      const msg = this.peer.lastMessage();
-      if (msg && msg !== lastMessage) {
-        lastMessage = msg;
-
-        if (msg.type === 'game-state') {
-          const incoming  = msg.payload as GameState;
-          const prevRolls = this.state().rollsLeft;
-          const prevTurn  = this.state().turn;
-          const newRolls  = incoming.rollsLeft;
-          const newTurn   = incoming.turn;
-
-          // Detect a remote roll: rollsLeft decreased within the same turn
-          const wasRemoteRoll = newRolls < prevRolls && newTurn === prevTurn && !this.isMyTurn;
-
-          // Detect a turn change: turn number increased (scoring happened)
-          const wasTurnChange = newTurn > prevTurn;
-
-          // Reject stale states (older turn than what we already have)
-          if (incoming.turn >= this.state().turn) {
-            this.yahtzee.applyRemoteState(incoming);
-          }
-
-          if (wasRemoteRoll) {
-            // Animate only the dice that were not held
-            incoming.dice.forEach((die, i) => {
-              if (!die.held) {
-                setTimeout(() => this.diceRef()?.animateRoll(i), i * 80);
-              }
-            });
-          }
-
-          if (wasTurnChange) {
-            // Reset held-up wrappers visually when turn ends
-            this.diceRef()?.resetAllWrappers();
-          }
-        }
-
-        if ((msg.type as string) === 'score-event') {
-          const { category, playerName } = msg.payload as any;
-          this.showScoreToast(category, playerName);
-          if (this.gameOptions().soundEnabled) {
-            this.playScoreSound(category);
-          }
-        }
-
-        if ((msg.type as string) === 'game-over') {
-          this.yahtzee.applyRemoteState(msg.payload as GameState);
-          setTimeout(() => {
-            this.showGameOver.set(true);
-            this.playGameOverSound();
-          }, 400);
-        }
-
-        if ((msg.type as string) === 'play-again') {
-          this.yahtzee.applyRemoteState(msg.payload as GameState);
-          this.showGameOver.set(false);
-        }
+      // Drain the full queue every tick — never miss a message even if
+      // multiple arrive within the same 100ms poll window
+      const messages = this.peer.messageQueue.dequeueAll();
+      for (const msg of messages) {
+        this.handlePeerMessage(msg);
       }
     }, 100);
     this.pollIntervals.push(interval);
   }
 
-  private watchDisconnections(): void {
-    let lastMsg = this.peer.lastMessage();
-    const interval = setInterval(() => {
-      const msg = this.peer.lastMessage();
-      if (msg && msg !== lastMsg) {
-        lastMsg = msg;
-        if (msg.type === 'player-left') {
-          const peerId = (msg.payload as any)?.peerId;
-          const player = this.state().players.find(p => p.id === peerId);
-          this.disconnectedPlayer.set(player?.name ?? 'A player');
-          this.showDisconnected.set(true);
-        }
+  private handlePeerMessage(msg: any): void {
+    if (msg.type === 'game-state') {
+      const incoming  = msg.payload as GameState;
+      const prevRolls = this.state().rollsLeft;
+      const prevTurn  = this.state().turn;
+      const newRolls  = incoming.rollsLeft;
+      const newTurn   = incoming.turn;
+
+      const wasRemoteRoll = newRolls < prevRolls && newTurn === prevTurn && !this.isMyTurn();
+      const wasTurnChange = newTurn > prevTurn;
+
+      // Accept newer turn always; same-turn only if rollsLeft didn't increase
+      const shouldAccept =
+        newTurn > prevTurn ||
+        (newTurn === prevTurn && newRolls <= prevRolls);
+
+      if (shouldAccept) {
+        this.yahtzee.applyRemoteState(incoming);
       }
-    }, 200);
-    this.pollIntervals.push(interval);
+
+      if (wasRemoteRoll) {
+        incoming.dice.forEach((die, i) => {
+          if (!die.held) {
+            setTimeout(() => this.diceRef()?.animateRoll(i), i * 80);
+          }
+        });
+      }
+
+      if (wasTurnChange) {
+        this.diceRef()?.resetAllWrappers();
+      }
+    }
+
+    if ((msg.type as string) === 'score-event') {
+      const { category, playerName } = msg.payload as any;
+      this.showScoreToast(category, playerName);
+      if (this.gameOptions().soundEnabled) {
+        this.playScoreSound(category);
+      }
+    }
+
+    if ((msg.type as string) === 'game-over') {
+      this.yahtzee.applyRemoteState(msg.payload as GameState);
+      setTimeout(() => {
+        this.showGameOver.set(true);
+        this.playGameOverSound();
+      }, 400);
+    }
+
+    if ((msg.type as string) === 'play-again') {
+      this.yahtzee.applyRemoteState(msg.payload as GameState);
+      this.showGameOver.set(false);
+    }
+
+    if (msg.type === 'player-left') {
+      const peerId = (msg.payload as any)?.peerId;
+      const player = this.state().players.find((p: any) => p.id === peerId);
+      this.disconnectedPlayer.set(player?.name ?? 'A player');
+      this.showDisconnected.set(true);
+    }
+  }
+
+
+  private watchDisconnections(): void {
+    // player-left is now handled inside handlePeerMessage via the message queue
   }
 
   private watchTurnChange(): void {
@@ -324,7 +309,6 @@ export class GameComponent implements OnInit, OnDestroy {
       const current = this.state().currentPlayer;
       if (current !== lastPlayer) {
         lastPlayer = current;
-        // Clear any stale overlay when the turn changes
         this.activeOverlay.set(null);
         const player = this.state().players.find(p => p.id === current);
         const label = current === this.myPlayerId() ? 'Your Turn!' : `${player?.name}'s Turn`;
@@ -337,6 +321,29 @@ export class GameComponent implements OnInit, OnDestroy {
 
   // ── Private helpers ────────────────────────────────────────────────────────
 
+  private initMyPlayer(): void {
+    const myId = this.peer.myPeerId();
+
+    if (myId && this.state().phase !== 'lobby' &&
+        this.state().players.some(p => p.id === myId)) {
+      this.myPlayerId.set(myId);
+    } else if (myId && this.state().phase !== 'lobby') {
+      const retryInterval = setInterval(() => {
+        const id = this.peer.myPeerId();
+        if (id && this.state().players.some(p => p.id === id)) {
+          this.myPlayerId.set(id);
+          clearInterval(retryInterval);
+        }
+      }, 100);
+      setTimeout(() => {
+        clearInterval(retryInterval);
+        if (!this.myPlayerId()) this.startDemoGame();
+      }, 3000);
+    } else {
+      this.startDemoGame();
+    }
+  }
+
   private startDemoGame(): void {
     const me = this.yahtzee.createPlayer('player-1', 'You', true);
     this.myPlayerId.set('player-1');
@@ -345,26 +352,25 @@ export class GameComponent implements OnInit, OnDestroy {
 
   private showBonusAnimation(): void {
     setTimeout(() => {
-      if (!this.isMyTurn) return;
+      if (!this.isMyTurn()) return;
       this.activeOverlay.set('bonus' as ScoreCategory);
       this.playBonusSound();
     }, 400);
   }
 
   private checkForAchievedCategory(): void {
-    if (!this.isMyTurn) return;
+    if (!this.isMyTurn()) return;
     const specialCategories: ScoreCategory[] = [
       'yahtzee', 'largeStraight', 'smallStraight',
       'fullHouse', 'fourOfAKind', 'threeOfAKind'
     ];
     for (const cat of specialCategories) {
-      const alreadyScored = this.currentPlayerObj?.scoreCard[cat] !== null;
+      const alreadyScored = this.currentPlayerObj()?.scoreCard[cat] !== null;
       if (alreadyScored) continue;
       const score = this.yahtzee.previewScore(cat);
       if (score !== null && score > 0) {
         setTimeout(() => {
-          // Guard: only show if still my turn and no other overlay is active
-          if (!this.isMyTurn || this.activeOverlay() !== null) return;
+          if (!this.isMyTurn() || this.activeOverlay() !== null) return;
           this.activeOverlay.set(cat);
           this.playAchievementSound(cat);
         }, 750);

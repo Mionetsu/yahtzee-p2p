@@ -483,3 +483,22 @@
     align-items: center;
   }
 }
+
+.kick-btn {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.2);
+  color: rgba(255,255,255,0.5);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  &:hover {
+    border-color: #ff6b6b;
+    color: #ff6b6b;
+  }
+}

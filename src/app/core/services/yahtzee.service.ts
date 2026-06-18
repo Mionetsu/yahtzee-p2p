@@ -1,4 +1,3 @@
-
 import { Injectable, signal, computed } from '@angular/core';
 import { Die, DieValue, GameState, GamePhase, Player, ScoreCard, ScoreCategory, AvatarColor } from '../models';
 
@@ -98,8 +97,7 @@ export class YahtzeeService {
 
   // ── Hold / Throw a dice ─────────────────────────────────────────
   toggleHold(dieId: number): void {
-    const { rollsLeft } = this._state();
-    if (rollsLeft === 3) return; // no se puede retener antes de tirar
+    // Guard (rollsLeft < 3) is enforced in GameComponent before calling this.
     this._state.update(s => ({
       ...s,
       dice: s.dice.map(d =>
@@ -110,8 +108,9 @@ export class YahtzeeService {
 
   // ── Score a category ───────────────────────────────────────────────────
   scoreCategory(playerId: string, category: ScoreCategory): void {
-    const { dice, rollsLeft } = this._state();
-    if (rollsLeft === 3) return; // debe tirar al menos una vez
+    const { dice } = this._state();
+    // Guard (must roll at least once) is enforced in GameComponent, not here.
+    // Removing it here prevents P2P state from blocking remote players.
 
     const values = dice.map(d => d.value);
     const score  = this.calculateScore(category, values);

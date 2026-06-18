@@ -20,30 +20,30 @@ export class DiceComponent implements OnChanges {
   private cubeEls    = viewChildren<ElementRef>('cubeRef');
   private wrapperEls = viewChildren<ElementRef>('wrapperRef');
 
-  private prevHeld: boolean[] = [];
-
   ngOnChanges(changes: SimpleChanges): void {
-    if (!changes['dice']) return;
-    const current = this.dice();
-    current.forEach((die, i) => {
-      const wasHeld = this.prevHeld[i] ?? false;
-      if (die.held !== wasHeld) {
-        const wrapper = this.wrapperEls()[i]?.nativeElement;
-        if (wrapper) {
-          gsap.to(wrapper, {
-            y: die.held ? -24 : 0,
-            duration: 0.25,
-            ease: 'back.out(2)'
-          });
-        }
-      }
-    });
-    this.prevHeld = current.map(d => d.held);
+    // When a new turn starts rollsLeft resets to 3 — snap all wrappers down immediately.
+    if (changes['rollsLeft'] && this.rollsLeft() === 3) {
+      this.wrapperEls().forEach(w => {
+        gsap.killTweensOf(w.nativeElement);
+        gsap.set(w.nativeElement, { y: 0 });
+      });
+    }
   }
 
   onDieClick(dieId: number): void {
     if (!this.canHold() || this.isBlocked()) return;
     this.dieToggled.emit(dieId);
+
+    const wrapper = this.wrapperEls()[dieId]?.nativeElement;
+    if (!wrapper) return;
+
+    // Read held state AFTER emitting so the parent has already toggled it
+    const die = this.dice()[dieId];
+    gsap.to(wrapper, {
+      y: !die.held ? -24 : 0,
+      duration: 0.25,
+      ease: 'back.out(2)'
+    });
   }
 
   animateRoll(dieIndex: number): void {
@@ -63,7 +63,8 @@ export class DiceComponent implements OnChanges {
 
   resetAllWrappers(): void {
     this.wrapperEls().forEach(w => {
-      gsap.to(w.nativeElement, { y: 0, duration: 0.2, ease: 'power2.out' });
+      gsap.killTweensOf(w.nativeElement);
+      gsap.set(w.nativeElement, { y: 0 });
     });
   }
 

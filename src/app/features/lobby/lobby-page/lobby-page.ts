@@ -31,6 +31,7 @@ export class LobbyPage implements OnInit, OnDestroy {
   isLoading      = signal<boolean>(false);
   connectedPeers = signal<string[]>([]);
   guestPlayers   = signal<Record<string, { nickname: string; avatarColor: AvatarColor; avatarImage?: string }>>({});
+  hostInfo       = signal<{ nickname: string; avatarColor: AvatarColor; avatarImage?: string } | null>(null);
 
   hasReconnectData  = signal<boolean>(false);
   reconnectRoomCode = signal<string>('');
@@ -111,8 +112,8 @@ export class LobbyPage implements OnInit, OnDestroy {
       this.peer.broadcastMessage({
         type: 'player-joined',
         payload: {
-          peerId: this.peer.myPeerId(),
-          nickname: this.nickname().trim(),
+          peerId:      this.peer.myPeerId(),
+          nickname:    this.nickname().trim(),
           avatarColor: this.selectedColor(),
           avatarImage: this.selectedImage()
         }
@@ -142,7 +143,6 @@ export class LobbyPage implements OnInit, OnDestroy {
     );
 
     const allPlayers = [hostPlayer, ...guestPlayers];
-
     this.yahtzee.startGame(allPlayers, this.peer.roomCode());
 
     this.peer.broadcastMessage({
@@ -151,6 +151,38 @@ export class LobbyPage implements OnInit, OnDestroy {
     });
 
     this.router.navigate(['/game']);
+  }
+
+  // Kick a guest from the lobby (host only)
+  kickPlayer(peerId: string): void {
+    if (!this.peer.isHost()) return;
+
+    // Notify the kicked player specifically
+    this.peer.sendTo(peerId, {
+      type: 'player-left' as any,
+      payload: { peerId, kicked: true }
+    });
+
+    // Remove from local list
+    this.guestPlayers.update(g => {
+      const updated = { ...g };
+      delete updated[peerId];
+      return updated;
+    });
+
+    // Broadcast updated room state so other guests see the change
+    this.peer.broadcastMessage({
+      type: 'room-state' as any,
+      payload: {
+        host: {
+          peerId:      this.peer.myPeerId(),
+          nickname:    this.nickname().trim(),
+          avatarColor: this.selectedColor(),
+          avatarImage: this.selectedImage()
+        },
+        guests: this.guestPlayers()
+      }
+    });
   }
 
   async reconnectToGame(): Promise<void> {
@@ -192,40 +224,137 @@ export class LobbyPage implements OnInit, OnDestroy {
     this.router.navigate(['/game']);
   }
 
-  private watchPeers(): void {
-    let lastMsg = this.peer.lastMessage();
+  private handleHostLeft(): void {
+    if (this.pollInterval) clearInterval(this.pollInterval);
+    this.peer.disconnect();
+    this.errorMsg.set('The host left the room. Please create or join a new room.');
+    this.guestPlayers.set({});
+    this.hostInfo.set(null);
+    this.view.set('home');
+  }
 
+  private handleKicked(): void {
+    if (this.pollInterval) clearInterval(this.pollInterval);
+    this.peer.disconnect();
+    this.errorMsg.set('You were removed from the room by the host.');
+    this.guestPlayers.set({});
+    this.hostInfo.set(null);
+    this.view.set('home');
+  }
+
+  private watchPeers(): void {
     this.pollInterval = setInterval(() => {
       this.connectedPeers.set(this.peer.peers());
 
-      const msg = this.peer.lastMessage();
-      if (msg && msg !== lastMsg) {
-        lastMsg = msg;
-
+      const messages = this.peer.messageQueue.dequeueAll();
+      console.log('[LobbyPage] messages dequeued:', messages);
+      for (const msg of messages) {
         if (msg.type === 'player-joined') {
           const p = msg.payload as any;
           if (p?.peerId && p?.nickname) {
-            this.guestPlayers.update(guests => ({
-              ...guests,
-              [p.peerId]: {
-                nickname: p.nickname,
+            // Replace any previous entry with the same nickname to avoid
+            // duplicates when a player leaves and rejoins with a new peerId.
+            this.guestPlayers.update(guests => {
+              const cleaned: typeof guests = {};
+              for (const [id, data] of Object.entries(guests)) {
+                if (data.nickname !== p.nickname) cleaned[id] = data;
+              }
+              cleaned[p.peerId] = {
+                nickname:    p.nickname,
                 avatarColor: p.avatarColor ?? '#AEC6FF',
                 avatarImage: p.avatarImage
+              };
+              return cleaned;
+            });
+
+            this.peer.broadcastMessage({
+              type: 'room-state' as any,
+              payload: {
+                host: {
+                  peerId:      this.peer.myPeerId(),
+                  nickname:    this.nickname().trim(),
+                  avatarColor: this.selectedColor(),
+                  avatarImage: this.selectedImage()
+                },
+                guests: this.guestPlayers()
               }
-            }));
+            });
           }
+        }
+
+        if (msg.type === 'player-left') {
+          const leftId = (msg.payload as any)?.peerId;
+          this.guestPlayers.update(g => {
+            const updated = { ...g };
+            delete updated[leftId];
+            return updated;
+          });
         }
       }
     }, 200);
   }
 
   private watchForStartGame(): void {
-    let lastMsg = this.peer.lastMessage();
+    const hostPeerId = this.joinCode().trim().toUpperCase();
+    let hostAliveChecks = 0;
 
     this.pollInterval = setInterval(() => {
-      const msg = this.peer.lastMessage();
-      if (msg && msg !== lastMsg) {
-        lastMsg = msg;
+      // Detect host disconnection: no open connections for 2 consecutive ticks
+      const peerList = this.peer.peers();
+      if (peerList.length === 0 && this.view() === 'waiting') {
+        hostAliveChecks++;
+        if (hostAliveChecks >= 2) {
+          this.handleHostLeft();
+          return;
+        }
+      } else {
+        hostAliveChecks = 0;
+      }
+
+      const messages = this.peer.messageQueue.dequeueAll();
+      for (const msg of messages) {
+        if ((msg.type as string) === 'room-state') {
+          const rs = msg.payload as any;
+          if (rs?.host) {
+            this.hostInfo.set({
+              nickname:    rs.host.nickname,
+              avatarColor: rs.host.avatarColor ?? '#AEC6FF',
+              avatarImage: rs.host.avatarImage
+            });
+          }
+          if (rs?.guests) {
+            const myId = this.peer.myPeerId();
+            const others: Record<string, any> = {};
+            for (const [peerId, data] of Object.entries(rs.guests as Record<string, any>)) {
+              if (peerId !== myId) others[peerId] = data;
+            }
+            this.guestPlayers.set(others);
+          }
+        }
+
+        if (msg.type === 'player-left') {
+          const p = msg.payload as any;
+          const leftPeerId = p?.peerId;
+
+          // Kicked by host
+          if (p?.kicked && leftPeerId === this.peer.myPeerId()) {
+            this.handleKicked();
+            return;
+          }
+
+          // Host disconnected
+          if (leftPeerId === hostPeerId) {
+            this.handleHostLeft();
+            return;
+          }
+
+          // Another guest left
+          this.guestPlayers.update(g => {
+            const updated = { ...g };
+            delete updated[leftPeerId];
+            return updated;
+          });
+        }
 
         if (msg.type === 'start-game') {
           this.yahtzee.applyRemoteState(msg.payload as any);
@@ -234,5 +363,13 @@ export class LobbyPage implements OnInit, OnDestroy {
         }
       }
     }, 200);
+  }
+
+  cancelWaiting(): void {
+    if (this.pollInterval) clearInterval(this.pollInterval);
+    this.peer.disconnect();
+    this.guestPlayers.set({});
+    this.hostInfo.set(null);
+    this.view.set('home');
   }
 }

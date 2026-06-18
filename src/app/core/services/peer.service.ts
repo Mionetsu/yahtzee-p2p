@@ -5,7 +5,7 @@ import { GameState } from '../models';
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 export interface P2PMessage {
-  type: 'game-state' | 'player-joined' | 'player-left' | 'chat' | 'start-game' | 'score-event';
+  type: 'game-state' | 'player-joined' | 'player-left' | 'chat' | 'start-game' | 'score-event' | 'game-over' | 'play-again';
   payload: unknown;
 }
 
@@ -16,6 +16,8 @@ export class PeerService {
   readonly roomCode    = signal<string>('');
   readonly peers       = signal<string[]>([]);
   readonly lastMessage = signal<P2PMessage | null>(null);
+  private _messageQueue: P2PMessage[] = [];
+  readonly messageQueue = { dequeueAll: () => { const q = [...this._messageQueue]; this._messageQueue = []; return q; } };
   readonly myPeerId    = signal<string>('');
   readonly isHost      = signal<boolean>(false);
 
@@ -54,7 +56,10 @@ export class PeerService {
       this.status.set('connecting');
       this.isHost.set(true);
 
-      this.peer = new Peer(code);
+      // DEV: comment out for production
+      this.peer = new Peer(code, { host: 'localhost', port: 9000, path: '/' });
+      // PROD: uncomment for production
+      // this.peer = new Peer(code);
 
       this.peer.on('open', id => {
         this.roomCode.set(id);
@@ -79,7 +84,10 @@ export class PeerService {
       this.status.set('connecting');
       this.isHost.set(false);
 
-      this.peer = new Peer();
+      // DEV: comment out for production
+      this.peer = new Peer('', { host: 'localhost', port: 9000, path: '/' });
+      // PROD: uncomment for production
+      // this.peer = new Peer();
 
       this.peer.on('open', (myId) => {
         this.myPeerId.set(myId);
@@ -140,6 +148,7 @@ export class PeerService {
     conn.on('data', (data: unknown) => {
       const msg = data as P2PMessage;
       this.lastMessage.set(msg);
+      this._messageQueue.push(msg);
 
       if (this.isHost()) {
         this.connections.forEach((c, peerId) => {
@@ -151,19 +160,31 @@ export class PeerService {
     });
 
     conn.on('close', () => {
+      console.log('[PeerService] conn closed for peer:', conn.peer);
       this.connections.delete(conn.peer);
       this.peers.update(list => list.filter(id => id !== conn.peer));
 
-      this.broadcastMessage({
-        type: 'player-left',
-        payload: { peerId: conn.peer }
-      });
+      const leftMsg: P2PMessage = { type: 'player-left', payload: { peerId: conn.peer } };
+      console.log('[PeerService] pushing player-left to queue:', leftMsg);
+      this._messageQueue.push(leftMsg);
+      this.broadcastMessage(leftMsg);
     });
 
     conn.on('error', err => {
       console.error('[PeerService] Connection error:', err);
       this.connections.delete(conn.peer);
     });
+  }
+
+  promoteToHost(newRoomCode: string): void {
+    this.isHost.set(true);
+    this.roomCode.set(newRoomCode);
+    // Start accepting incoming connections
+    if (this.peer) {
+      this.peer.on('connection', conn => {
+        this.setupConnection(conn);
+      });
+    }
   }
 
   broadcastMessage(message: P2PMessage): void {
@@ -178,4 +199,6 @@ export class PeerService {
       chars[Math.floor(Math.random() * chars.length)]
     ).join('');
   }
+
+  
 }

@@ -103,6 +103,10 @@
         @if (!canProceed && nickname().length > 0) {
           <p class="lobby__hint">Nickname must be at least 2 characters</p>
         }
+
+        @if (errorMsg()) {
+          <p class="error-msg">{{ errorMsg() }}</p>
+        }
       </div>
     }
 
@@ -140,30 +144,81 @@
         <p class="card__sub">Share this code with your friend</p>
 
         <div class="room-code-display">
-          <span class="room-code-display__code">{{ roomCode() }}</span>
+          <span class="room-code-display__code">{{ roomCode() || peer.roomCode() }}</span>
           <button class="room-code-display__copy" (click)="copyCode()">Copy</button>
         </div>
 
         <div class="waiting-players">
-          <div class="waiting-player waiting-player--host">
-            <div class="waiting-player__avatar">{{ nickname()[0]?.toUpperCase() }}</div>
-            <span class="waiting-player__name">{{ nickname() }}</span>
-            <span class="waiting-player__tag">Host</span>
-          </div>
-          @for (entry of guestPlayers() | keyvalue; track entry.key) {
-            <div class="waiting-player">
-              <div class="waiting-player__avatar waiting-player__avatar--guest">
-                {{ entry.value.nickname[0].toUpperCase() }}
+          @if (peer.isHost()) {
+            <!-- HOST VIEW -->
+            <div class="waiting-player waiting-player--host">
+              <div class="waiting-player__avatar" [style.background]="selectedColor()">
+                {{ nickname()[0]?.toUpperCase() }}
               </div>
-              <span class="waiting-player__name">{{ entry.value.nickname }}</span>
+              <span class="waiting-player__name">{{ nickname() }}</span>
+              <span class="waiting-player__tag">Host</span>
+            </div>
+            @for (entry of guestPlayers() | keyvalue; track entry.key) {
+              <div class="waiting-player">
+                <div class="waiting-player__avatar waiting-player__avatar--guest"
+                  [style.background]="entry.value.avatarColor">
+                  {{ entry.value.nickname[0].toUpperCase() }}
+                </div>
+                <span class="waiting-player__name">{{ entry.value.nickname }}</span>
+                <span class="waiting-player__tag waiting-player__tag--connected">Connected</span>
+                <!-- Kick button: only visible to host -->
+                <button class="kick-btn" title="Remove player" (click)="kickPlayer(entry.key)">
+                  &#10005;
+                </button>
+              </div>
+            }
+            @for (empty of [].constructor(3 - (guestPlayers() | keyvalue).length); track $index) {
+              <div class="waiting-player waiting-player--empty">
+                <div class="waiting-player__avatar waiting-player__avatar--empty"></div>
+                <span class="waiting-player__name">Waiting...</span>
+              </div>
+            }
+          } @else {
+            <!-- GUEST VIEW -->
+            @if (hostInfo()) {
+              <div class="waiting-player waiting-player--host">
+                <div class="waiting-player__avatar" [style.background]="hostInfo()!.avatarColor">
+                  {{ hostInfo()!.nickname[0]?.toUpperCase() }}
+                </div>
+                <span class="waiting-player__name">{{ hostInfo()!.nickname }}</span>
+                <span class="waiting-player__tag">Host</span>
+              </div>
+            } @else {
+              <div class="waiting-player waiting-player--host">
+                <div class="waiting-player__avatar waiting-player__avatar--empty"></div>
+                <span class="waiting-player__name">Host</span>
+                <span class="waiting-player__tag">Host</span>
+              </div>
+            }
+            <div class="waiting-player">
+              <div class="waiting-player__avatar waiting-player__avatar--guest"
+                [style.background]="selectedColor()">
+                {{ nickname()[0]?.toUpperCase() }}
+              </div>
+              <span class="waiting-player__name">{{ nickname() }} (you)</span>
               <span class="waiting-player__tag waiting-player__tag--connected">Connected</span>
             </div>
-          }
-          @for (empty of [].constructor(3 - (guestPlayers() | keyvalue).length); track $index) {
-            <div class="waiting-player waiting-player--empty">
-              <div class="waiting-player__avatar waiting-player__avatar--empty"></div>
-              <span class="waiting-player__name">Waiting...</span>
-            </div>
+            @for (entry of guestPlayers() | keyvalue; track entry.key) {
+              <div class="waiting-player">
+                <div class="waiting-player__avatar waiting-player__avatar--guest"
+                  [style.background]="entry.value.avatarColor">
+                  {{ entry.value.nickname[0].toUpperCase() }}
+                </div>
+                <span class="waiting-player__name">{{ entry.value.nickname }}</span>
+                <span class="waiting-player__tag waiting-player__tag--connected">Connected</span>
+              </div>
+            }
+            @for (empty of [].constructor(2 - (guestPlayers() | keyvalue).length); track $index) {
+              <div class="waiting-player waiting-player--empty">
+                <div class="waiting-player__avatar waiting-player__avatar--empty"></div>
+                <span class="waiting-player__name">Waiting...</span>
+              </div>
+            }
           }
         </div>
 
@@ -178,7 +233,7 @@
           } @else {
             <p class="card__sub">Waiting for host to start the game...</p>
           }
-          <button class="btn btn--ghost" (click)="view.set('home')">Cancel</button>
+          <button class="btn btn--ghost" (click)="cancelWaiting()">Cancel</button>
         </div>
       </div>
     }
