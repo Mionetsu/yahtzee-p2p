@@ -196,7 +196,6 @@ export class YahtzeeService {
       const nextIdx = (idx + 1) % s.players.length;
       const nextId  = s.players[nextIdx].id;
 
-      // Verificar si el juego terminó (todos tienen scorecard lleno)
       const gameOver = s.players.every(p =>
         Object.values(p.scoreCard).every(v => v !== null)
       );
