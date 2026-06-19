@@ -238,19 +238,28 @@ export class GameComponent implements OnInit, OnDestroy {
 
   private handlePeerMessage(msg: any): void {
     if (msg.type === 'game-state') {
-      const incoming  = msg.payload as GameState;
-      const prevRolls = this.state().rollsLeft;
-      const prevTurn  = this.state().turn;
-      const newRolls  = incoming.rollsLeft;
-      const newTurn   = incoming.turn;
+      const incoming     = msg.payload as GameState;
+      const prevRolls     = this.state().rollsLeft;
+      const prevTurn       = this.state().turn;
+      const prevPlayer     = this.state().currentPlayer;
+      const newRolls       = incoming.rollsLeft;
+      const newTurn         = incoming.turn;
+      const newPlayer       = incoming.currentPlayer;
 
-      const wasRemoteRoll = newRolls < prevRolls && newTurn === prevTurn && !this.isMyTurn();
-      const wasTurnChange = newTurn > prevTurn;
+      const samePlayerTurn = newPlayer === prevPlayer;
 
-      // Accept newer turn always; same-turn only if rollsLeft didn't increase
+      const wasRemoteRoll = newRolls < prevRolls && samePlayerTurn && !this.isMyTurn();
+      // A "player change" happened if either the round advanced OR the
+      // active player id changed (covers same-round player-to-player handoff).
+      const wasPlayerChange = newTurn > prevTurn || newPlayer !== prevPlayer;
+
+      // Accept if the round is newer, OR same round but it's a fresh turn for
+      // a different player (rollsLeft reset to 3), OR same round/player with
+      // rollsLeft that didn't increase (a normal roll).
       const shouldAccept =
         newTurn > prevTurn ||
-        (newTurn === prevTurn && newRolls <= prevRolls);
+        (newTurn === prevTurn && newPlayer !== prevPlayer) ||
+        (newTurn === prevTurn && newPlayer === prevPlayer && newRolls <= prevRolls);
 
       if (shouldAccept) {
         this.yahtzee.applyRemoteState(incoming);
@@ -264,7 +273,7 @@ export class GameComponent implements OnInit, OnDestroy {
         });
       }
 
-      if (wasTurnChange) {
+      if (wasPlayerChange) {
         this.diceRef()?.resetAllWrappers();
       }
     }

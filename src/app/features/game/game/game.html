@@ -30,6 +30,8 @@
           [rollsLeft]="rollsLeft()"
           [textSize]="gameOptions().textSize"
           [viewMode]="gameOptions().scorecardView"
+          [turn]="state().turn"
+          [currentPlayerId]="state().currentPlayer"
           (categorySelected)="scoreCategory($event)" />
       </aside>
     }

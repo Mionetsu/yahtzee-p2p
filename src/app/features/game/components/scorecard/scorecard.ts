@@ -43,6 +43,9 @@ export class ScorecardComponent {
   rollsLeft        = input<number>(3);
   textSize         = input<'normal' | 'large' | 'xlarge'>('normal');
   viewMode         = input<'modern' | 'classic'>('modern');
+  turn             = input<number>(1);
+  maxTurns         = input<number>(13);
+  currentPlayerId  = input<string>('');
 
   categorySelected  = output<ScoreCategory>();
   largeTextToggled  = output<void>();
@@ -81,6 +84,14 @@ export class ScorecardComponent {
     return this.isMyTurn() &&
            this.rollsLeft() < 3 &&
            this.currentPlayer().scoreCard[category] === null;
+  }
+
+  isPlayerActive(playerId: string): boolean {
+    return this.currentPlayerId() === playerId;
+  }
+
+  get allPlayersCount(): number {
+    return 1 + this.otherPlayers().length;
   }
 
   selectCategory(category: ScoreCategory): void {

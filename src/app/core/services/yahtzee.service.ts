@@ -196,16 +196,20 @@ export class YahtzeeService {
       const nextIdx = (idx + 1) % s.players.length;
       const nextId  = s.players[nextIdx].id;
 
+
+      //Verify if the game is over (all players have filled their scorecards)
       const gameOver = s.players.every(p =>
         Object.values(p.scoreCard).every(v => v !== null)
       );
+      //The number of turn (round) only advances when we loop back to the first player — that is, when all players have played in this round.
+      const isNewRound = nextIdx === 0;
 
       return {
         ...s,
         currentPlayer: gameOver ? s.currentPlayer : nextId,
         dice: this.createDice(),
         rollsLeft: 3,
-        turn: s.turn + 1,
+        turn: isNewRound ? s.turn + 1 : s.turn,
         phase: gameOver ? 'finished' : 'playing'
       };
     });
