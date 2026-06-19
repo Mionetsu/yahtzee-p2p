@@ -1,4 +1,4 @@
-import { Component, input, output, OnChanges, OnDestroy } from '@angular/core';
+import { Component, input, output, effect, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 @Component({
@@ -8,7 +8,7 @@ import { CommonModule } from '@angular/common';
   templateUrl: './player-disconnected.html',
   styleUrl: './player-disconnected.scss'
 })
-export class PlayerDisconnectedComponent implements OnChanges, OnDestroy {
+export class PlayerDisconnectedComponent implements OnDestroy {
   playerName  = input<string>('Player');
   visible     = input<boolean>(false);
   waitSeconds = input<number>(60);
@@ -19,13 +19,15 @@ export class PlayerDisconnectedComponent implements OnChanges, OnDestroy {
   timeLeft    = 60;
   private timer: ReturnType<typeof setInterval> | null = null;
 
-  ngOnChanges(): void {
-    if (this.visible()) {
-      this.timeLeft = this.waitSeconds();
-      this.startCountdown();
-    } else {
-      this.stopCountdown();
-    }
+  constructor() {
+    effect(() => {
+      if (this.visible()) {
+        this.timeLeft = this.waitSeconds();
+        this.startCountdown();
+      } else {
+        this.stopCountdown();
+      }
+    });
   }
 
   ngOnDestroy(): void {

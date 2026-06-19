@@ -192,6 +192,23 @@ export class LobbyPage implements OnInit, OnDestroy {
     this.errorMsg.set('');
     try {
       await this.peer.joinRoom(saved.roomCode);
+
+      // Find our player info from the saved state so we can re-announce ourselves
+      const myPlayer = saved.state.players.find(p => p.id === saved.myId);
+
+      // Re-announce to the host so it knows we're back in the room
+      this.peer.broadcastMessage({
+        type: 'player-joined',
+        payload: {
+          peerId:      this.peer.myPeerId(),
+          nickname:    myPlayer?.name ?? 'Player',
+          avatarColor: myPlayer?.avatarColor ?? '#AEC6FF',
+          avatarImage: myPlayer?.avatarImage,
+          reconnect:   true,
+          originalId:  saved.myId
+        }
+      });
+
       this.yahtzee.applyRemoteState(saved.state);
       this.router.navigate(['/game']);
     } catch {
@@ -252,6 +269,14 @@ export class LobbyPage implements OnInit, OnDestroy {
         if (msg.type === 'player-joined') {
           const p = msg.payload as any;
           if (p?.peerId && p?.nickname) {
+            // If this is a reconnect, the player's peer ID changed. Send
+            // the current game state so they can resume the game.
+            if (p.reconnect && p.originalId) {
+              const currentState = this.yahtzee.state();
+              // Broadcast the current state to all (including the reconnecting player)
+              this.peer.broadcastState(currentState, this.peer.myPeerId());
+            }
+
             // Replace any previous entry with the same nickname to avoid
             // duplicates when a player leaves and rejoins with a new peerId.
             this.guestPlayers.update(guests => {
