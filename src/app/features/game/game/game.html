@@ -4,7 +4,12 @@
   <header class="game-header">
     <div class="game-header__room">
       <span class="room-label">Room</span>
-      <span class="room-code">{{ state().roomCode }}</span>
+      <span class="room-code-row">
+        <span class="room-code">{{ state().roomCode }}</span>
+        <button class="room-code-copy" title="Copy room code" (click)="copyRoomCode()">
+          {{ roomCodeCopied() ? '✓' : '⧉' }}
+        </button>
+      </span>
     </div>
     <div class="game-header__turn">
       <span class="turn-label">Turn {{ state().turn }}</span>
@@ -94,6 +99,44 @@
     [waitSeconds]="60"
     (continueWaiting)="onContinueWaiting()"
     (endGame)="onEndGameAfterDisconnect()" />
+
+  <!-- Host migration: the host disconnected, we're either taking over or
+       reconnecting to whoever did. No countdown here since it resolves on
+       its own — just a status message and a manual way out if it can't. -->
+  @if (showHostMigration()) {
+    <div class="migration-overlay">
+      <div class="migration-card">
+        <div class="migration-icon">&#128260;</div>
+        <h2 class="migration-title">Host Disconnected</h2>
+        <p class="migration-sub">{{ migrationMessage() }}</p>
+        <div class="migration-actions">
+          <button class="btn-end" (click)="onEndGameAfterMigration()">
+            End Game
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Shown right after this player becomes the new host, so they know to
+       hand this code to whoever was disconnected — that player has no
+       automatic way of learning it, since by the time we know we're the
+       new host, they've already lost their connection to everyone. -->
+  @if (newHostCode()) {
+    <div class="new-host-banner">
+      <div class="new-host-banner__text">
+        <strong>Eres el nuevo host.</strong>
+        Comparte este código con quien se desconectó para que pueda volver a entrar:
+      </div>
+      <div class="new-host-banner__code-row">
+        <span class="new-host-banner__code">{{ newHostCode() }}</span>
+        <button class="new-host-banner__copy" (click)="copyRoomCode()">
+          {{ roomCodeCopied() ? 'Copiado ✓' : 'Copiar' }}
+        </button>
+      </div>
+      <button class="new-host-banner__dismiss" (click)="dismissNewHostBanner()">Cerrar</button>
+    </div>
+  }
 
   <!-- Turn change banner -->
   @if (turnBanner()) {

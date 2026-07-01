@@ -249,9 +249,9 @@
             class="field__input field__input--code"
             type="text"
             placeholder="YTZ-XXXX"
-            maxlength="8"
+            maxlength="40"
             [ngModel]="joinCode()"
-            (ngModelChange)="joinCode.set($event.toUpperCase())" />
+            (ngModelChange)="joinCode.set($event)" />
         </div>
 
         @if (errorMsg()) {

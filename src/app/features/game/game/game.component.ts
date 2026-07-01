@@ -31,6 +31,18 @@ export class GameComponent implements OnInit, OnDestroy {
   showDisconnected   = signal<boolean>(false);
   disconnectedPlayer = signal<string>('');
 
+  // Host migration: shown instead of the generic disconnect overlay when
+  // the player who left was the host, since that case needs an automatic
+  // recovery flow rather than a "wait for them" timer.
+  showHostMigration  = signal<boolean>(false);
+  migrationMessage   = signal<string>('');
+
+  // Set once after this client becomes the new host, so we can show the
+  // "share this code" banner. null hides it.
+  newHostCode    = signal<string | null>(null);
+  roomCodeCopied = signal<boolean>(false);
+  private copyResetTimeout: ReturnType<typeof setTimeout> | null = null;
+
   readonly state     = this.yahtzee.state;
   readonly dice      = this.yahtzee.dice;
   readonly rollsLeft = this.yahtzee.rollsLeft;
@@ -121,6 +133,7 @@ export class GameComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.pollIntervals.forEach(id => clearInterval(id));
+    if (this.copyResetTimeout) clearTimeout(this.copyResetTimeout);
     this.peer.disconnect();
     this.audioCtx?.close();
   }
@@ -299,12 +312,136 @@ export class GameComponent implements OnInit, OnDestroy {
       this.showGameOver.set(false);
     }
 
+    // The mid-game rejoin handshake (matching a returning player to their seat) now happens entirely in PeerService.handleMidGameJoin, whichreplies with 'rejoin-accepted' — handled below arrives while we (the host) are already mounted on /game, and the case where WE are the one rejoining and this message reaches us after GameComponent has already initialized (e.g. via the automatic reconnect banner, which navigates to /game before the host replies).
+    if ((msg.type as string) === 'rejoin-accepted') {
+      const { state, playerId } = msg.payload as { state: GameState; playerId: string };
+      this.yahtzee.applyRemoteState(state);
+      if (playerId) this.myPlayerId.set(playerId);
+      this.showHostMigration.set(false);
+    }
+
+    if ((msg.type as string) === 'player-rejoined') {
+      const { name } = msg.payload as { playerId: string; name: string };
+      if (this.showDisconnected() && this.disconnectedPlayer() === name) {
+        this.showDisconnected.set(false);
+      }
+    }
+
     if (msg.type === 'player-left') {
       const peerId = (msg.payload as any)?.peerId;
       const player = this.state().players.find((p: any) => p.id === peerId);
+
+      if (player?.isHost) {
+        this.beginHostMigration();
+        return;
+      }
+
       this.disconnectedPlayer.set(player?.name ?? 'A player');
       this.showDisconnected.set(true);
     }
+  }
+
+  // ── Host migration ─────────────────────────────────────────────────────────
+  // Star topology: guests only connect to the host, never to each other. So
+  // when the host disappears, every remaining player loses their only
+  // connection at the same instant and has no channel left to negotiate who
+  // takes over. We avoid needing one: the heir is always "the first
+  // non-host player in state.players", which every client already agrees on
+  // because it comes from the synced game state. The new room code is
+  // derived deterministically from the heir's player id (peer.deriveMigrationCode),
+  // so every client computes the identical "YTZ-XXXX" code independently —
+  // same short format as a normal room, no manual sharing required — and
+  // everyone else just reconnects to that code, reusing the exact
+  // rejoin-accepted handshake from the normal reconnect flow.
+
+  private beginHostMigration(): void {
+    if (this.showHostMigration()) return;
+
+    this.showDisconnected.set(false);
+    this.showHostMigration.set(true);
+
+    const heir = this.state().players.find(p => !p.isHost);
+
+    if (!heir) {
+      this.migrationMessage.set('El host se desconectó y no queda nadie más para tomar su lugar.');
+      return;
+    }
+
+    const migrationCode = this.peer.deriveMigrationCode(heir.id);
+
+    if (this.myPlayerId() === heir.id) {
+      this.becomeNewHost(heir.id, migrationCode);
+    } else {
+      this.migrationMessage.set(`El host se desconectó. Reconectando a través de ${heir.name}…`);
+      // Give the heir a moment to finish standing up their new room
+      // before we try to connect to it.
+      setTimeout(() => this.reconnectThroughNewHost(migrationCode), 1500);
+    }
+  }
+
+  private async becomeNewHost(myId: string, migrationCode: string): Promise<void> {
+    this.migrationMessage.set('El host se desconectó. Tomando el control de la partida…');
+    try {
+      // Update isHost locally before anyone reconnects, so the state we hand
+      // out via rejoin-accepted already reflects who's in charge now. Note:
+      // myId (the player's identity in state.players) and migrationCode
+      // (the new PeerJS room address) are deliberately different values —
+      // decoupling them is what lets the room code stay in the short
+      // YTZ-XXXX format instead of exposing the player's raw peer id.
+      const updated: GameState = {
+        ...this.state(),
+        players: this.state().players.map(p => ({ ...p, isHost: p.id === myId })),
+        roomCode: migrationCode
+      };
+      this.yahtzee.applyRemoteState(updated);
+
+      await this.peer.createRoom(migrationCode);
+      this.showHostMigration.set(false);
+      this.newHostCode.set(migrationCode);
+    } catch {
+      this.migrationMessage.set('No se pudo tomar el control de la partida. Intenta recargar la página.');
+    }
+  }
+
+  copyRoomCode(): void {
+    navigator.clipboard.writeText(this.state().roomCode).then(() => {
+      this.roomCodeCopied.set(true);
+      if (this.copyResetTimeout) clearTimeout(this.copyResetTimeout);
+      this.copyResetTimeout = setTimeout(() => this.roomCodeCopied.set(false), 2000);
+    }).catch(() => {});
+  }
+
+  dismissNewHostBanner(): void {
+    this.newHostCode.set(null);
+  }
+
+  private async reconnectThroughNewHost(newHostRoomCode: string, attempt = 1): Promise<void> {
+    try {
+      await this.peer.joinRoom(newHostRoomCode);
+      this.peer.broadcastMessage({
+        type: 'player-joined',
+        payload: {
+          peerId:      this.peer.myPeerId(),
+          nickname:    this.myPlayerObj()?.name ?? 'Player',
+          avatarColor: this.myPlayerObj()?.avatarColor ?? '#AEC6FF',
+          avatarImage: this.myPlayerObj()?.avatarImage,
+          originalId:  this.myPlayerId()
+        }
+      });
+      // showHostMigration clears once 'rejoin-accepted' arrives, above.
+    } catch {
+      if (attempt < 5) {
+        setTimeout(() => this.reconnectThroughNewHost(newHostRoomCode, attempt + 1), 1500);
+      } else {
+        this.migrationMessage.set('No se pudo reconectar con el nuevo host.');
+      }
+    }
+  }
+
+  onEndGameAfterMigration(): void {
+    this.showHostMigration.set(false);
+    this.showGameOver.set(true);
+    this.playGameOverSound();
   }
 
 
@@ -331,6 +468,16 @@ export class GameComponent implements OnInit, OnDestroy {
   // ── Private helpers ────────────────────────────────────────────────────────
 
   private initMyPlayer(): void {
+    // Check if we're coming back from a reconnect — use the original player ID
+    const reconnectOriginalId = sessionStorage.getItem('yahtzee_reconnect_original_id');
+    if (reconnectOriginalId) {
+      sessionStorage.removeItem('yahtzee_reconnect_original_id');
+      if (this.state().players.some(p => p.id === reconnectOriginalId)) {
+        this.myPlayerId.set(reconnectOriginalId);
+        return;
+      }
+    }
+
     const myId = this.peer.myPeerId();
 
     if (myId && this.state().phase !== 'lobby' &&

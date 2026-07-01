@@ -141,3 +141,177 @@
     transform: translateX(-50%) translateY(-8px);
   }
 }
+// Host migration overlay
+.migration-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.migration-card {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 24px;
+  padding: 48px 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  max-width: 380px;
+  width: 90%;
+  animation: slideIn .3s ease-out;
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-20px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.migration-icon {
+  font-size: 48px;
+  filter: drop-shadow(0 0 16px rgba(91,79,232,0.5));
+  animation: spin 1.8s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.migration-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+  text-align: center;
+}
+
+.migration-sub {
+  font-size: 14px;
+  color: rgba(255,255,255,0.55);
+  text-align: center;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.migration-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.migration-actions .btn-end {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(248,113,113,0.15);
+  border: 1px solid rgba(248,113,113,0.3);
+  color: #f87171;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background .15s;
+
+  &:hover { background: rgba(248,113,113,0.25); }
+}
+
+// Room code copy button (header)
+.room-code-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.room-code-copy {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.7);
+  border-radius: 6px;
+  width: 22px;
+  height: 22px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .15s;
+
+  &:hover { background: rgba(255,255,255,0.16); color: #fff; }
+}
+
+// New-host banner: shown when this client just became host via migration
+.new-host-banner {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 160;
+  background: rgba(20, 18, 40, 0.95);
+  border: 1px solid rgba(91,79,232,0.5);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+  border-radius: 16px;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 360px;
+  width: 90%;
+  animation: slideIn .3s ease-out;
+}
+
+.new-host-banner__text {
+  font-size: 13px;
+  color: rgba(255,255,255,0.75);
+  text-align: center;
+  line-height: 1.5;
+
+  strong { color: #fff; display: block; margin-bottom: 2px; }
+}
+
+.new-host-banner__code-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.new-host-banner__code {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: #FFE566;
+}
+
+.new-host-banner__copy {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background .15s;
+
+  &:hover { background: rgba(255,255,255,0.16); }
+}
+
+.new-host-banner__dismiss {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.4);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  text-decoration: underline;
+
+  &:hover { color: rgba(255,255,255,0.7); }
+}

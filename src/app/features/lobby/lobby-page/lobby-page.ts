@@ -36,6 +36,19 @@ export class LobbyPage implements OnInit, OnDestroy {
   hasReconnectData  = signal<boolean>(false);
   reconnectRoomCode = signal<string>('');
 
+  // Two code formats share this one input: the classic host-generated
+  // "YTZ-XXXX" (always uppercase, safe to force-uppercase for forgiving
+  // manual entry) and UUID-style codes used after host migration, e.g.
+  // "9f647f73-308d-4b06-9e23-c10d891186ce" — those come straight from a
+  // player's id, PeerJS ids are case-sensitive, and crypto.randomUUID()
+  // produces lowercase, so uppercasing one silently breaks the connection.
+  // We detect the UUID shape and leave it exactly as typed/pasted.
+  private normalizeRoomCode(code: string): string {
+    const trimmed = code.trim();
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed);
+    return isUuid ? trimmed : trimmed.toUpperCase();
+  }
+
   selectedColor = signal<AvatarColor>('#AEC6FF');
   selectedImage = signal<string | undefined>(undefined);
 
@@ -108,7 +121,7 @@ export class LobbyPage implements OnInit, OnDestroy {
     this.isLoading.set(true);
     this.errorMsg.set('');
     try {
-      await this.peer.joinRoom(this.joinCode().trim().toUpperCase());
+      await this.peer.joinRoom(this.normalizeRoomCode(this.joinCode()));
       this.peer.broadcastMessage({
         type: 'player-joined',
         payload: {
@@ -196,7 +209,7 @@ export class LobbyPage implements OnInit, OnDestroy {
       // Find our player info from the saved state so we can re-announce ourselves
       const myPlayer = saved.state.players.find(p => p.id === saved.myId);
 
-      // Re-announce to the host so it knows we're back in the room
+      // Re-announce to the host so it knows we're back and sends us the latest state
       this.peer.broadcastMessage({
         type: 'player-joined',
         payload: {
@@ -208,6 +221,9 @@ export class LobbyPage implements OnInit, OnDestroy {
           originalId:  saved.myId
         }
       });
+
+      // Store the original player ID so GameComponent can find us in the state
+      sessionStorage.setItem('yahtzee_reconnect_original_id', saved.myId);
 
       this.yahtzee.applyRemoteState(saved.state);
       this.router.navigate(['/game']);
@@ -320,7 +336,7 @@ export class LobbyPage implements OnInit, OnDestroy {
   }
 
   private watchForStartGame(): void {
-    const hostPeerId = this.joinCode().trim().toUpperCase();
+    const hostPeerId = this.normalizeRoomCode(this.joinCode());
     let hostAliveChecks = 0;
 
     this.pollInterval = setInterval(() => {
@@ -385,6 +401,27 @@ export class LobbyPage implements OnInit, OnDestroy {
           this.yahtzee.applyRemoteState(msg.payload as any);
           if (this.pollInterval) clearInterval(this.pollInterval);
           this.router.navigate(['/game']);
+        }
+
+        // The room's game was already in progress when we joined — the host
+        // matched us to our original seat (by nickname/originalId) and sent
+        // back the live state, so we drop straight into the game instead of
+        // sitting in "waiting" forever.
+        if ((msg.type as string) === 'rejoin-accepted') {
+          const { state, playerId } = msg.payload as { state: any; playerId: string };
+          sessionStorage.setItem('yahtzee_reconnect_original_id', playerId);
+          this.yahtzee.applyRemoteState(state);
+          if (this.pollInterval) clearInterval(this.pollInterval);
+          this.router.navigate(['/game']);
+        }
+
+        if ((msg.type as string) === 'rejoin-rejected') {
+          if (this.pollInterval) clearInterval(this.pollInterval);
+          this.peer.disconnect();
+          this.errorMsg.set('No se pudo unir: la partida ya está en curso y no hay un lugar disponible para ti.');
+          this.guestPlayers.set({});
+          this.hostInfo.set(null);
+          this.view.set('home');
         }
       }
     }, 200);
