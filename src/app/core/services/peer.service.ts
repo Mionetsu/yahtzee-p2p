@@ -90,9 +90,9 @@ export class PeerService {
       this.isHost.set(true);
 
       // DEV: comment out for production
-      this.peer = new Peer(code, { host: 'localhost', port: 9000, path: '/' });
+      //this.peer = new Peer(code, { host: 'localhost', port: 9000, path: '/' });
       // PROD: uncomment for production
-      //this.peer = new Peer(code);
+      this.peer = new Peer(code);
 
       this.peer.on('open', id => {
         this.roomCode.set(id);
@@ -122,9 +122,9 @@ export class PeerService {
       this.isHost.set(false);
 
       // DEV: comment out for production
-      this.peer = new Peer('', { host: 'localhost', port: 9000, path: '/' });
+      //this.peer = new Peer('', { host: 'localhost', port: 9000, path: '/' });
       // PROD: uncomment for production
-      //this.peer = new Peer();
+      this.peer = new Peer();
 
       this.peer.on('open', (myId) => {
         this.myPeerId.set(myId);
